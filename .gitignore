@@ -1,0 +1,65 @@
+## ---------------------------------------------------------------------------
+## VacaFlow
+## Deliverable constraint (Intent.md TC-18): the source package must exclude
+## node_modules, .next, bin and obj.
+## Legal constraint (Intent.md LC-03): the SQLite database file must never be
+## committed. It holds emails, password hashes, names, reasons and comments.
+## ---------------------------------------------------------------------------
+
+# --- SQLite database (LC-03) ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# --- .NET ---
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.user
+*.suo
+*.userprefs
+.vs/
+*.received.*
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+build/
+.pnpm-store/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Environment and secrets (TC-14) ---
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+*.pfx
+secrets.json
+
+# --- Test and coverage output ---
+TestResults/
+coverage/
+*.coverage
+*.trx
+
+# --- Editors ---
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# --- OS ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Packaged deliverables (built, not versioned) ---
+*.zip
