@@ -25,7 +25,7 @@ The authoritative scope boundary is [`docs/Intent.md`](docs/Intent.md). Anything
 | [`docs/prototype/`](docs/prototype/) | Functional prototype — 11 screens and the markup that is the design source for the backlog | ✅ Reference |
 | [`docs/FRD.md`](docs/FRD.md) | Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/NFR.md`](docs/NFR.md) | Non-Functional Requirement Document | ✅ Baseline v1.0 |
-| [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document | ✅ Baseline v1.0 |
+| [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document, audited rule by rule against the `CA-*` rules | ✅ **v2.0** |
 | [`docs/WBS.md`](docs/WBS.md) | Work Breakdown Structure | ✅ Baseline v1.0 |
 
 Normative rule sets applied to this project (`Docs/` in the project workspace, outside this repository):
