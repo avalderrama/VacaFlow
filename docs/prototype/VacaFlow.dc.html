@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:oklch(98% 0.004 250);font-family:'IBM Plex Sans',system-ui,sans-serif;color:oklch(22% 0.02 260)}
+    a{color:oklch(52% 0.15 260);text-decoration:none}
+    a:hover{color:oklch(46% 0.15 260);text-decoration:underline}
+    :focus-visible{outline:2px solid oklch(52% 0.15 260);outline-offset:2px}
+    ::placeholder{color:oklch(62% 0.01 260)}
+    @keyframes vfFade{from{opacity:0}to{opacity:1}}
+  </style>
+</helmet>
+
+<a href="#main-content" style="position:fixed;left:-9999px;top:0;background:white;color:oklch(22% 0.02 260);padding:12px 18px;z-index:200;border-radius:0 0 8px 0;font-size:14px;font-weight:600" style-focus="left:0">Saltar al contenido principal</a>
+
+<sc-if value="{{isLoginView}}" hint-placeholder-val="{{true}}">
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="width:100%;max-width:400px;background:white;border:1px solid oklch(90% 0.006 250);border-radius:12px;padding:40px;box-shadow:0 1px 3px oklch(0% 0 0 / 0.06)">
+    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:22px;margin-bottom:4px">VacaFlow</div>
+    <div style="font-size:14px;color:oklch(50% 0.02 260);margin-bottom:28px">Gestión de solicitudes de ausencia</div>
+
+    <sc-if value="{{loginError}}">
+      <div role="alert" style="background:oklch(95% 0.03 25);border:1px solid oklch(80% 0.1 25);color:oklch(35% 0.15 25);font-size:14px;padding:10px 14px;border-radius:8px;margin-bottom:20px">{{loginError}}</div>
+    </sc-if>
+
+    <form onSubmit="{{submitLogin}}" style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label for="login-email" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Correo electrónico</label>
+        <input id="login-email" type="email" required="{{true}}" autoComplete="email" value="{{loginEmail}}" onChange="{{setLoginEmail}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+      </div>
+      <div>
+        <label for="login-password" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Contraseña</label>
+        <input id="login-password" type="password" required="{{true}}" autoComplete="current-password" value="{{loginPassword}}" onChange="{{setLoginPassword}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+      </div>
+      <button type="submit" style="margin-top:8px;background:oklch(52% 0.15 260);color:white;border:none;padding:11px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Iniciar sesión</button>
+    </form>
+
+    <div style="margin-top:20px;font-size:14px;color:oklch(50% 0.02 260)">
+      ¿No tienes cuenta? <a href="#" onClick="{{goToRegister}}" style="font-weight:600">Regístrate</a>
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid oklch(92% 0.006 260)">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:oklch(55% 0.02 260);margin-bottom:8px">Cuentas de prueba (no productivas)</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:oklch(40% 0.02 260);line-height:1.7">
+        manager@vacaflow.test / Manager123!<br/>
+        employee@vacaflow.test / Employee123!
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isRegisterView}}" hint-placeholder-val="{{false}}">
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="width:100%;max-width:420px;background:white;border:1px solid oklch(90% 0.006 250);border-radius:12px;padding:40px;box-shadow:0 1px 3px oklch(0% 0 0 / 0.06)">
+    <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:22px;margin-bottom:4px">VacaFlow</div>
+    <div style="font-size:14px;color:oklch(50% 0.02 260);margin-bottom:28px">Crear una cuenta</div>
+    <form onSubmit="{{submitRegister}}" style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label for="reg-name" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Nombre completo</label>
+        <input id="reg-name" type="text" required="{{true}}" maxLength="120" value="{{regFullName}}" onChange="{{setRegFullName}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+        <sc-if value="{{regErrFullName}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{regErrFullName}}</p></sc-if>
+      </div>
+      <div>
+        <label for="reg-email" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Correo electrónico</label>
+        <input id="reg-email" type="email" required="{{true}}" autoComplete="email" value="{{regEmail}}" onChange="{{setRegEmail}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+        <sc-if value="{{regErrEmail}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{regErrEmail}}</p></sc-if>
+      </div>
+      <div>
+        <label for="reg-password" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Contraseña</label>
+        <input id="reg-password" type="password" required="{{true}}" autoComplete="new-password" value="{{regPassword}}" onChange="{{setRegPassword}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+        <p style="font-size:12px;color:oklch(55% 0.02 260);margin:6px 0 0">Mínimo 8 caracteres.</p>
+        <sc-if value="{{regErrPassword}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{regErrPassword}}</p></sc-if>
+      </div>
+      <fieldset style="border:none;padding:0;margin:0">
+        <legend style="font-size:13px;font-weight:600;margin-bottom:8px;padding:0">Rol (para propósitos de la demo)</legend>
+        <div style="display:flex;gap:8px">
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid oklch(85% 0.008 260);border-radius:8px;padding:10px;cursor:pointer;font-size:14px">
+            <input type="radio" name="role" onChange="{{setRegRoleEmployee}}" checked="{{regRoleEmployeeChecked}}"/> Empleado
+          </label>
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid oklch(85% 0.008 260);border-radius:8px;padding:10px;cursor:pointer;font-size:14px">
+            <input type="radio" name="role" onChange="{{setRegRoleManager}}" checked="{{regRoleManagerChecked}}"/> Manager
+          </label>
+        </div>
+      </fieldset>
+      <button type="submit" disabled="{{saving}}" style="margin-top:8px;background:oklch(52% 0.15 260);color:white;border:none;padding:11px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Crear cuenta</button>
+    </form>
+    <div style="margin-top:20px;font-size:14px;color:oklch(50% 0.02 260)">
+      ¿Ya tienes cuenta? <a href="#" onClick="{{goToLogin}}" style="font-weight:600">Inicia sesión</a>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isAuthed}}" hint-placeholder-val="{{false}}">
+<div style="min-height:100vh;display:flex;flex-direction:column">
+  <header style="display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:white;border-bottom:1px solid oklch(90% 0.006 250)">
+    <div style="display:flex;align-items:center;gap:36px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:18px;letter-spacing:-0.02em">VacaFlow</div>
+      <nav style="display:flex;gap:6px">
+        <button onClick="{{goRequestsTab}}" style="{{navRequestsStyle}}">Mis solicitudes</button>
+        <sc-if value="{{isManager}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{goQueueTab}}" style="{{navQueueStyle}}">
+            Bandeja de aprobación<sc-if value="{{hasQueueCount}}"> ({{queueCount}})</sc-if>
+          </button>
+        </sc-if>
+      </nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="text-align:right">
+        <div style="font-size:14px;font-weight:600">{{currentUserName}}</div>
+        <div style="font-size:12px;color:oklch(50% 0.02 260)">{{currentUserRole}}</div>
+      </div>
+      <button onClick="{{logout}}" style="background:white;border:1px solid oklch(85% 0.008 260);padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <sc-if value="{{banner}}">
+    <div style="padding:16px 32px 0;max-width:1100px;width:100%;margin:0 auto;box-sizing:border-box">
+      <div role="status" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:8px;font-size:14px;background:{{bannerBg}};color:{{bannerFg}};border:1px solid {{bannerBorder}};animation:vfFade .15s ease-out">
+        <span>{{banner.message}}</span>
+        <button onClick="{{dismissBanner}}" aria-label="Cerrar aviso" style="background:none;border:none;font-size:18px;line-height:1;cursor:pointer;color:inherit">×</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <main id="main-content" style="flex:1;padding:32px;max-width:1100px;width:100%;margin:0 auto;box-sizing:border-box">
+
+    <sc-if value="{{showMyRequestsList}}" hint-placeholder-val="{{true}}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h1 style="font-size:24px;font-weight:600;margin:0">Mis solicitudes</h1>
+        <button onClick="{{goNewRequest}}" style="background:oklch(52% 0.15 260);color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Nueva solicitud</button>
+      </div>
+
+      <sc-if value="{{listLoading}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="height:64px;border-radius:10px;background:oklch(94% 0.004 250)"></div>
+          <div style="height:64px;border-radius:10px;background:oklch(94% 0.004 250)"></div>
+          <div style="height:64px;border-radius:10px;background:oklch(94% 0.004 250)"></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{listNotLoading}}" hint-placeholder-val="{{true}}">
+        <sc-if value="{{hasRequestRows}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{requestRows}}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:white;border:1px solid oklch(90% 0.006 250);border-radius:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:180px">
+                  <div style="font-size:15px;font-weight:600">{{r.typeName}}</div>
+                  <div style="font-size:13px;color:oklch(50% 0.02 260);margin-top:2px">{{r.startDate}} → {{r.endDate}}</div>
+                </div>
+                <div style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:{{r.stateBg}};color:{{r.stateFg}}">{{r.stateLabel}}</div>
+                <div style="display:flex;gap:8px">
+                  <sc-if value="{{r.canEdit}}"><button onClick="{{r.onEdit}}" style="padding:8px 14px;border-radius:7px;border:1px solid oklch(85% 0.008 260);background:white;font-size:13px;font-weight:600;cursor:pointer">Editar</button></sc-if>
+                  <sc-if value="{{r.canSubmit}}"><button onClick="{{r.onSubmit}}" style="padding:8px 14px;border-radius:7px;border:none;background:oklch(52% 0.15 260);color:white;font-size:13px;font-weight:600;cursor:pointer">Enviar</button></sc-if>
+                  <sc-if value="{{r.canView}}"><button onClick="{{r.onView}}" style="padding:8px 14px;border-radius:7px;border:1px solid oklch(85% 0.008 260);background:white;font-size:13px;font-weight:600;cursor:pointer">Ver</button></sc-if>
+                  <sc-if value="{{r.canCancel}}"><button onClick="{{r.onCancel}}" style="padding:8px 14px;border-radius:7px;border:1px solid oklch(80% 0.1 25);background:white;color:oklch(45% 0.15 25);font-size:13px;font-weight:600;cursor:pointer">Cancelar</button></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{hasNoRequestRows}}" hint-placeholder-val="{{false}}">
+          <div style="text-align:center;padding:64px 24px;background:white;border:1px dashed oklch(85% 0.008 260);border-radius:12px">
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px">Aún no has creado solicitudes</div>
+            <div style="font-size:14px;color:oklch(50% 0.02 260);margin-bottom:20px">Crea tu primera solicitud de ausencia para comenzar.</div>
+            <button onClick="{{goNewRequest}}" style="background:oklch(52% 0.15 260);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Crear solicitud</button>
+          </div>
+        </sc-if>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{showQueueList}}" hint-placeholder-val="{{false}}">
+      <h1 style="font-size:24px;font-weight:600;margin:0 0 24px">Bandeja de aprobación</h1>
+      <sc-if value="{{listLoading}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="height:96px;border-radius:10px;background:oklch(94% 0.004 250)"></div>
+          <div style="height:96px;border-radius:10px;background:oklch(94% 0.004 250)"></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{listNotLoading}}" hint-placeholder-val="{{true}}">
+        <sc-if value="{{hasQueueRows}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{queueRows}}" as="q" hint-placeholder-count="2">
+              <div style="padding:20px;background:white;border:1px solid oklch(90% 0.006 250);border-radius:10px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+                  <div>
+                    <div style="font-size:15px;font-weight:600">{{q.employeeName}}</div>
+                    <div style="font-size:13px;color:oklch(50% 0.02 260);margin-top:2px">{{q.typeName}} · {{q.startDate}} → {{q.endDate}}</div>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-shrink:0">
+                    <button onClick="{{q.onReject}}" style="padding:8px 16px;border-radius:7px;border:1px solid oklch(80% 0.1 25);background:white;color:oklch(45% 0.15 25);font-size:13px;font-weight:600;cursor:pointer">Rechazar</button>
+                    <button onClick="{{q.onApprove}}" style="padding:8px 16px;border-radius:7px;border:none;background:oklch(55% 0.14 150);color:white;font-size:13px;font-weight:600;cursor:pointer">Aprobar</button>
+                  </div>
+                </div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid oklch(94% 0.004 250);font-size:14px;color:oklch(30% 0.02 260)">{{q.reason}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{hasNoQueueRows}}" hint-placeholder-val="{{false}}">
+          <div style="text-align:center;padding:64px 24px;background:white;border:1px dashed oklch(85% 0.008 260);border-radius:12px">
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px">No hay solicitudes pendientes</div>
+            <div style="font-size:14px;color:oklch(50% 0.02 260)">Cuando un empleado asignado a ti envíe una solicitud, aparecerá aquí.</div>
+          </div>
+        </sc-if>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{isFormView}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+        <button onClick="{{backToList}}" aria-label="Volver a mis solicitudes" style="background:none;border:none;font-size:20px;cursor:pointer;color:oklch(50% 0.02 260)">←</button>
+        <h1 style="font-size:24px;font-weight:600;margin:0">{{formTitle}}</h1>
+      </div>
+
+      <div style="max-width:560px;background:white;border:1px solid oklch(90% 0.006 250);border-radius:12px;padding:32px">
+        <sc-if value="{{formErrGeneral}}"><div role="alert" style="background:oklch(95% 0.03 25);border:1px solid oklch(80% 0.1 25);color:oklch(35% 0.15 25);font-size:14px;padding:10px 14px;border-radius:8px;margin-bottom:20px">{{formErrGeneral}}</div></sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div>
+            <label for="f-type" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Tipo de ausencia</label>
+            <select id="f-type" value="{{formAbsenceTypeId}}" onChange="{{setFormAbsenceType}}" disabled="{{formReadOnly}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit;background:white">
+              <option value="">Selecciona…</option>
+              <sc-for list="{{typeOptions}}" as="t" hint-placeholder-count="3">
+                <option value="{{t.id}}">{{t.name}}</option>
+              </sc-for>
+            </select>
+            <sc-if value="{{formErrAbsenceType}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{formErrAbsenceType}}</p></sc-if>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <label for="f-start" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Fecha de inicio</label>
+              <input id="f-start" type="date" min="{{todayStr}}" value="{{formStartDate}}" onChange="{{setFormStartDate}}" disabled="{{formReadOnly}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+              <sc-if value="{{formErrStartDate}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{formErrStartDate}}</p></sc-if>
+            </div>
+            <div style="flex:1;min-width:180px">
+              <label for="f-end" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Fecha de fin</label>
+              <input id="f-end" type="date" min="{{formStartDate}}" value="{{formEndDate}}" onChange="{{setFormEndDate}}" disabled="{{formReadOnly}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit"/>
+              <sc-if value="{{formErrEndDate}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{formErrEndDate}}</p></sc-if>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="f-reason" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Motivo</label>
+              <span style="font-size:12px;color:oklch(55% 0.02 260)">{{reasonCount}}/500</span>
+            </div>
+            <textarea id="f-reason" maxLength="500" rows="4" value="{{formReason}}" onChange="{{setFormReason}}" disabled="{{formReadOnly}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit;resize:vertical"></textarea>
+            <sc-if value="{{formErrReason}}"><p role="alert" style="color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0">{{formErrReason}}</p></sc-if>
+          </div>
+        </div>
+
+        <sc-if value="{{approvalBlock}}" hint-placeholder-val="{{false}}">
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid oklch(92% 0.006 260)">
+            <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:oklch(55% 0.02 260);margin-bottom:10px">Decisión</div>
+            <div style="font-size:15px;font-weight:600;margin-bottom:4px">{{approvalBlock.decisionLabel}}</div>
+            <div style="font-size:14px;color:oklch(40% 0.02 260)">Por {{approvalBlock.managerName}} · {{approvalBlock.decidedAt}}</div>
+            <sc-if value="{{approvalBlock.comment}}"><div style="margin-top:10px;font-size:14px;color:oklch(30% 0.02 260);background:oklch(97% 0.004 250);padding:12px 14px;border-radius:8px">{{approvalBlock.comment}}</div></sc-if>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;gap:12px;margin-top:28px;align-items:center;flex-wrap:wrap">
+          <sc-if value="{{formEditable}}" hint-placeholder-val="{{true}}">
+            <button onClick="{{saveForm}}" disabled="{{saving}}" style="background:oklch(52% 0.15 260);color:white;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">{{saveLabel}}</button>
+          </sc-if>
+          <button onClick="{{backToList}}" style="background:white;border:1px solid oklch(85% 0.008 260);padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">{{cancelBtnLabel}}</button>
+          <sc-if value="{{currentViewRequestCancellable}}" hint-placeholder-val="{{false}}">
+            <button onClick="{{cancelFromDetail}}" style="margin-left:auto;background:white;border:1px solid oklch(80% 0.1 25);color:oklch(45% 0.15 25);padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Cancelar solicitud</button>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</sc-if>
+
+<sc-if value="{{cancelConfirmId}}" hint-placeholder-val="{{false}}">
+  <div style="position:fixed;inset:0;background:oklch(0% 0 0 / 0.4);display:flex;align-items:center;justify-content:center;z-index:50;animation:vfFade .15s ease-out" onClick="{{closeCancelConfirm}}">
+    <div onClick="{{stopClick}}" style="background:white;border-radius:12px;padding:28px;max-width:400px;width:90%">
+      <div style="font-size:17px;font-weight:600;margin-bottom:8px">¿Cancelar esta solicitud?</div>
+      <div style="font-size:14px;color:oklch(45% 0.02 260);margin-bottom:24px">Esta acción no se puede deshacer. La solicitud pasará al estado Cancelada.</div>
+      <div style="display:flex;gap:12px;justify-content:flex-end">
+        <button onClick="{{closeCancelConfirm}}" style="background:white;border:1px solid oklch(85% 0.008 260);padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Volver</button>
+        <button onClick="{{confirmCancel}}" style="background:oklch(55% 0.18 25);color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Sí, cancelar</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{decisionModal}}" hint-placeholder-val="{{false}}">
+  <div style="position:fixed;inset:0;background:oklch(0% 0 0 / 0.4);display:flex;align-items:center;justify-content:center;z-index:50;animation:vfFade .15s ease-out" onClick="{{closeDecision}}">
+    <div onClick="{{stopClick}}" style="background:white;border-radius:12px;padding:28px;max-width:420px;width:90%">
+      <div style="font-size:17px;font-weight:600;margin-bottom:16px">{{decisionModalTitle}}</div>
+      <label for="decision-comment" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Comentario (opcional)</label>
+      <textarea id="decision-comment" maxLength="500" rows="3" value="{{decisionCommentVal}}" onChange="{{setDecisionCommentEv}}" style="width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+      <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px">
+        <button onClick="{{closeDecision}}" style="background:white;border:1px solid oklch(85% 0.008 260);padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>
+        <button onClick="{{confirmDecision}}" style="background:{{decisionConfirmBg}};color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">{{decisionConfirmLabel}}</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    view: 'login',
+    sessionId: null,
+    loginFields: { email: '', password: '' },
+    loginError: null,
+    registerFields: { fullName: '', email: '', password: '', role: 'Employee' },
+    registerErrors: {},
+    formMode: 'create',
+    formRequestId: null,
+    formFields: { absenceTypeId: '', startDate: '', endDate: '', reason: '' },
+    formErrors: {},
+    saving: false,
+    listLoading: false,
+    banner: null,
+    cancelConfirmId: null,
+    decisionModal: null,
+    navTab: 'requests',
+  };
+
+  componentDidMount() {
+    this.seed();
+    const sid = localStorage.getItem('vacaflow_session');
+    if (sid && this.getEmployee(sid)) {
+      this.state.sessionId = sid;
+      this.state.view = 'requests';
+      this.forceUpdate();
+    }
+    this._onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (this.state.decisionModal) this.closeDecision();
+        else if (this.state.cancelConfirmId) this.closeCancelConfirm();
+      }
+    };
+    window.addEventListener('keydown', this._onKeyDown);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this._onKeyDown);
+  }
+
+  db() {
+    try { return JSON.parse(localStorage.getItem('vacaflow_db_v1')) || null; } catch (e) { return null; }
+  }
+  saveDb(db) { localStorage.setItem('vacaflow_db_v1', JSON.stringify(db)); }
+  genId() { return 'id-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+  nowIso() { return new Date().toISOString(); }
+  todayStr() { return new Date().toISOString().slice(0, 10); }
+  fakeHash(pw) { return btoa(unescape(encodeURIComponent('vf::' + pw))); }
+  isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+
+  seed() {
+    let db = this.db();
+    if (db && db.employees && db.employees.length) return;
+    const managerId = this.genId(), emp1Id = this.genId(), emp2Id = this.genId();
+    const typeVac = this.genId(), typePers = this.genId(), typeSick = this.genId();
+    const today = new Date();
+    const plus = (d) => { const x = new Date(today); x.setDate(x.getDate() + d); return x.toISOString().slice(0, 10); };
+    db = {
+      employees: [
+        { id: managerId, fullName: 'Laura Méndez', email: 'manager@vacaflow.test', role: 'Manager', isActive: true, managerId: null },
+        { id: emp1Id, fullName: 'Carlos Ruiz', email: 'employee@vacaflow.test', role: 'Employee', isActive: true, managerId: managerId },
+        { id: emp2Id, fullName: 'Ana Torres', email: 'ana@vacaflow.test', role: 'Employee', isActive: true, managerId: managerId },
+      ],
+      accounts: [
+        { id: this.genId(), employeeId: managerId, passwordHash: this.fakeHash('Manager123!') },
+        { id: this.genId(), employeeId: emp1Id, passwordHash: this.fakeHash('Employee123!') },
+        { id: this.genId(), employeeId: emp2Id, passwordHash: this.fakeHash('Employee123!') },
+      ],
+      absenceTypes: [
+        { id: typeVac, code: 'VACATION', name: 'Vacaciones', isActive: true },
+        { id: typePers, code: 'PERSONAL_LEAVE', name: 'Permiso personal', isActive: true },
+        { id: typeSick, code: 'SICK_LEAVE', name: 'Incapacidad médica', isActive: true },
+      ],
+      requests: [], approvals: [],
+    };
+    const mkReq = (employeeId, absenceTypeId, startDate, endDate, reason, state) => {
+      const id = this.genId(); const createdAt = this.nowIso();
+      return { id, employeeId, absenceTypeId, startDate, endDate, reason, state, createdAtUtc: createdAt, updatedAtUtc: createdAt, submittedAtUtc: state !== 'Draft' ? createdAt : null, closedAtUtc: (state === 'Approved' || state === 'Rejected' || state === 'Cancelled') ? createdAt : null };
+    };
+    const rDraft = mkReq(emp1Id, typeVac, plus(10), plus(14), 'Viaje familiar de fin de año', 'Draft');
+    const rSubmitted = mkReq(emp1Id, typePers, plus(3), plus(3), 'Trámite personal en el banco', 'Submitted');
+    const rApproved = mkReq(emp1Id, typeVac, plus(-20), plus(-15), 'Vacaciones de verano', 'Approved');
+    const rRejected = mkReq(emp2Id, typeSick, plus(-5), plus(-3), 'Reposo médico', 'Rejected');
+    db.requests.push(rDraft, rSubmitted, rApproved, rRejected);
+    db.approvals.push(
+      { id: this.genId(), requestId: rApproved.id, responsibleManagerId: managerId, decision: 'Approved', comment: 'Disfruta tus vacaciones.', decidedAtUtc: rApproved.createdAtUtc },
+      { id: this.genId(), requestId: rRejected.id, responsibleManagerId: managerId, decision: 'Rejected', comment: 'Se requiere certificado médico adjunto.', decidedAtUtc: rRejected.createdAtUtc }
+    );
+    this.saveDb(db);
+  }
+
+  getEmployee(id) { const db = this.db(); return db.employees.find(e => e.id === id) || null; }
+  currentUser() { return this.state.sessionId ? this.getEmployee(this.state.sessionId) : null; }
+  absenceTypeName(id) { const db = this.db(); const t = db.absenceTypes.find(x => x.id === id); return t ? t.name : '—'; }
+
+  doRegister = () => {
+    const f = this.state.registerFields;
+    const errors = {};
+    if (!f.fullName || f.fullName.trim().length < 1 || f.fullName.length > 120) errors.fullName = 'El nombre completo es obligatorio (máx. 120 caracteres).';
+    if (!f.email || !this.isValidEmail(f.email) || f.email.length > 200) errors.email = 'Escribe un correo con formato válido, por ejemplo nombre@empresa.com';
+    if (!f.password || f.password.length < 8) errors.password = 'La contraseña debe tener al menos 8 caracteres.';
+    const db = this.db();
+    if (!errors.email && db.employees.some(e => e.email.toLowerCase() === f.email.toLowerCase())) errors.email = 'Ya existe una cuenta con este correo.';
+    if (Object.keys(errors).length) { this.setState({ registerErrors: errors }); return; }
+    this.setState({ saving: true });
+    setTimeout(() => {
+      const db2 = this.db();
+      const firstManager = db2.employees.find(e => e.role === 'Manager');
+      const id = this.genId();
+      const employee = { id, fullName: f.fullName.trim(), email: f.email.trim(), role: f.role, isActive: true, managerId: f.role === 'Employee' ? (firstManager ? firstManager.id : null) : null };
+      db2.employees.push(employee);
+      db2.accounts.push({ id: this.genId(), employeeId: id, passwordHash: this.fakeHash(f.password) });
+      this.saveDb(db2);
+      localStorage.setItem('vacaflow_session', id);
+      this.setState({ saving: false, sessionId: id, view: 'requests', navTab: 'requests', banner: { type: 'success', message: 'Cuenta creada. ¡Bienvenido a VacaFlow!' }, registerFields: { fullName: '', email: '', password: '', role: 'Employee' }, registerErrors: {} });
+    }, 300);
+  };
+
+  doLogin = () => {
+    const f = this.state.loginFields;
+    const db = this.db();
+    const employee = db.employees.find(e => e.email.toLowerCase() === f.email.trim().toLowerCase());
+    const account = employee ? db.accounts.find(a => a.employeeId === employee.id) : null;
+    if (!employee || !account || account.passwordHash !== this.fakeHash(f.password)) {
+      this.setState({ loginError: 'El correo o la contraseña son incorrectos.', loginFields: { email: f.email, password: '' } });
+      return;
+    }
+    if (!employee.isActive) {
+      this.setState({ loginError: 'Esta cuenta no está activa.', loginFields: { email: f.email, password: '' } });
+      return;
+    }
+    localStorage.setItem('vacaflow_session', employee.id);
+    this.setState({ sessionId: employee.id, view: 'requests', navTab: 'requests', loginError: null, loginFields: { email: '', password: '' }, banner: { type: 'success', message: 'Sesión iniciada como ' + employee.fullName + '.' } });
+  };
+
+  doLogout = () => {
+    localStorage.removeItem('vacaflow_session');
+    this.setState({ sessionId: null, view: 'login', banner: null, navTab: 'requests' });
+  };
+
+  goRequests = () => { this.setState({ view: 'requests', navTab: 'requests', banner: null }); this.reloadList(); };
+  goQueue = () => { this.setState({ view: 'requests', navTab: 'queue', banner: null }); this.reloadList(); };
+  goNewRequest = () => { this.setState({ view: 'form', formMode: 'create', formRequestId: null, formFields: { absenceTypeId: '', startDate: '', endDate: '', reason: '' }, formErrors: {}, banner: null }); };
+  goEditRequest(id) {
+    const db = this.db(); const r = db.requests.find(x => x.id === id);
+    this.setState({ view: 'form', formMode: 'edit', formRequestId: id, formFields: { absenceTypeId: r.absenceTypeId, startDate: r.startDate, endDate: r.endDate, reason: r.reason }, formErrors: {}, banner: null });
+  }
+  goViewRequest(id) {
+    const db = this.db(); const r = db.requests.find(x => x.id === id);
+    this.setState({ view: 'form', formMode: 'view', formRequestId: id, formFields: { absenceTypeId: r.absenceTypeId, startDate: r.startDate, endDate: r.endDate, reason: r.reason }, formErrors: {}, banner: null });
+  }
+  backToList = () => { this.setState({ view: 'requests', banner: null }); this.reloadList(); };
+  reloadList() { this.setState({ listLoading: true }); setTimeout(() => this.setState({ listLoading: false }), 280); }
+
+  validateRequestFields(f) {
+    const errors = {};
+    const db = this.db();
+    const type = db.absenceTypes.find(t => t.id === f.absenceTypeId && t.isActive);
+    if (!type) errors.absenceTypeId = 'Selecciona un tipo de ausencia válido.';
+    if (!f.startDate) errors.startDate = 'La fecha de inicio es obligatoria.';
+    if (!f.endDate) errors.endDate = 'La fecha de fin es obligatoria.';
+    if (!errors.startDate && !errors.endDate && f.endDate < f.startDate) errors.endDate = 'La fecha de fin no puede ser anterior a la fecha de inicio.';
+    if (!errors.startDate && f.startDate < this.todayStr()) errors.startDate = 'La fecha de inicio no puede ser anterior a hoy.';
+    if (!f.reason || f.reason.trim().length < 1 || f.reason.length > 500) errors.reason = 'El motivo es obligatorio (1 a 500 caracteres).';
+    return errors;
+  }
+
+  saveForm = () => {
+    const f = this.state.formFields;
+    const errors = this.validateRequestFields(f);
+    if (Object.keys(errors).length) { this.setState({ formErrors: errors }); return; }
+    this.setState({ saving: true });
+    setTimeout(() => {
+      const db = this.db();
+      const me = this.currentUser();
+      if (this.state.formMode === 'create') {
+        const id = this.genId(); const now = this.nowIso();
+        db.requests.push({ id, employeeId: me.id, absenceTypeId: f.absenceTypeId, startDate: f.startDate, endDate: f.endDate, reason: f.reason.trim(), state: 'Draft', createdAtUtc: now, updatedAtUtc: now, submittedAtUtc: null, closedAtUtc: null });
+        this.saveDb(db);
+        this.setState({ saving: false, view: 'requests', banner: { type: 'success', message: 'Borrador creado.' } });
+      } else {
+        const r = db.requests.find(x => x.id === this.state.formRequestId);
+        if (!r || r.employeeId !== me.id) { this.setState({ saving: false, formErrors: { general: 'No puedes editar esta solicitud.' } }); return; }
+        if (r.state !== 'Draft') { this.setState({ saving: false, formErrors: { general: 'Solo las solicitudes en borrador se pueden editar.' } }); return; }
+        r.absenceTypeId = f.absenceTypeId; r.startDate = f.startDate; r.endDate = f.endDate; r.reason = f.reason.trim(); r.updatedAtUtc = this.nowIso();
+        this.saveDb(db);
+        this.setState({ saving: false, view: 'requests', banner: { type: 'success', message: 'Cambios guardados.' } });
+      }
+      this.reloadList();
+    }, 300);
+  };
+
+  submitRequest(id) {
+    const db = this.db(); const me = this.currentUser();
+    const r = db.requests.find(x => x.id === id);
+    if (!r || r.employeeId !== me.id) { this.setState({ banner: { type: 'error', message: 'Solo puedes actuar sobre tus propias solicitudes.' } }); return; }
+    if (r.state !== 'Draft') { this.setState({ banner: { type: 'error', message: 'Esta solicitud no puede pasar de ' + r.state + ' a Submitted.' } }); return; }
+    if (r.startDate < this.todayStr()) { this.setState({ banner: { type: 'error', message: 'La fecha de inicio no puede ser anterior a hoy.' } }); return; }
+    r.state = 'Submitted'; r.submittedAtUtc = this.nowIso(); r.updatedAtUtc = this.nowIso();
+    this.saveDb(db);
+    this.setState({ banner: { type: 'success', message: 'Solicitud enviada para aprobación.' } });
+    this.reloadList();
+  }
+
+  requestCancel(id) { this.setState({ cancelConfirmId: id }); }
+  closeCancelConfirm = () => { this.setState({ cancelConfirmId: null }); };
+  confirmCancel = () => {
+    const id = this.state.cancelConfirmId;
+    const db = this.db(); const me = this.currentUser();
+    const r = db.requests.find(x => x.id === id);
+    if (!r || r.employeeId !== me.id) { this.setState({ cancelConfirmId: null, banner: { type: 'error', message: 'Solo puedes actuar sobre tus propias solicitudes.' } }); return; }
+    if (r.state !== 'Draft' && r.state !== 'Submitted') { this.setState({ cancelConfirmId: null, banner: { type: 'error', message: 'Esta solicitud ya está en un estado final.' } }); return; }
+    r.state = 'Cancelled'; r.closedAtUtc = this.nowIso(); r.updatedAtUtc = this.nowIso();
+    this.saveDb(db);
+    this.setState({ cancelConfirmId: null, banner: { type: 'success', message: 'Solicitud cancelada.' } });
+    this.reloadList();
+  };
+
+  openDecision(id, action) { this.setState({ decisionModal: { id, action, comment: '' } }); }
+  closeDecision = () => { this.setState({ decisionModal: null }); };
+  setDecisionComment = (v) => { this.setState({ decisionModal: { ...this.state.decisionModal, comment: v } }); };
+  confirmDecision = () => {
+    const { id, action, comment } = this.state.decisionModal;
+    const db = this.db(); const me = this.currentUser();
+    const r = db.requests.find(x => x.id === id);
+    if (!r) { this.setState({ decisionModal: null, banner: { type: 'error', message: 'La solicitud no fue encontrada.' } }); return; }
+    if (r.state !== 'Submitted') { this.setState({ decisionModal: null, banner: { type: 'error', message: 'Solo las solicitudes enviadas pueden aprobarse o rechazarse.' } }); return; }
+    if (me.role !== 'Manager') { this.setState({ decisionModal: null, banner: { type: 'error', message: 'Solo un manager puede aprobar o rechazar una solicitud.' } }); return; }
+    const owner = db.employees.find(e => e.id === r.employeeId);
+    if (!owner || owner.managerId !== me.id) { this.setState({ decisionModal: null, banner: { type: 'error', message: 'No eres el manager asignado a este empleado.' } }); return; }
+    if (r.employeeId === me.id) { this.setState({ decisionModal: null, banner: { type: 'error', message: 'No puedes decidir sobre tu propia solicitud.' } }); return; }
+    if (db.approvals.some(a => a.requestId === r.id)) { this.setState({ decisionModal: null, banner: { type: 'error', message: 'Esta solicitud ya tiene una decisión final.' } }); return; }
+    const decision = action === 'approve' ? 'Approved' : 'Rejected';
+    db.approvals.push({ id: this.genId(), requestId: r.id, responsibleManagerId: me.id, decision, comment: comment && comment.trim() ? comment.trim() : null, decidedAtUtc: this.nowIso() });
+    r.state = decision; r.closedAtUtc = this.nowIso(); r.updatedAtUtc = this.nowIso();
+    this.saveDb(db);
+    this.setState({ decisionModal: null, banner: { type: 'success', message: decision === 'Approved' ? 'Solicitud aprobada.' : 'Solicitud rechazada.' } });
+    this.reloadList();
+  };
+
+  dismissBanner = () => this.setState({ banner: null });
+  stopClick = (e) => e.stopPropagation();
+
+  setLoginField(k, v) { this.setState({ loginFields: { ...this.state.loginFields, [k]: v } }); }
+  setRegisterField(k, v) { this.setState({ registerFields: { ...this.state.registerFields, [k]: v } }); }
+  setFormField(k, v) { this.setState({ formFields: { ...this.state.formFields, [k]: v } }); }
+
+  renderVals() {
+    const db = this.db();
+    const me = this.currentUser();
+    const isAuthed = !!me;
+    const view = this.state.view;
+
+    const typeOptions = db.absenceTypes.filter(t => t.isActive).map(t => ({ id: t.id, name: t.name }));
+
+    const stateMeta = {
+      Draft: { label: 'Borrador', bg: 'oklch(93% 0.01 260)', fg: 'oklch(35% 0.02 260)' },
+      Submitted: { label: 'Enviada', bg: 'oklch(90% 0.09 80)', fg: 'oklch(38% 0.12 70)' },
+      Approved: { label: 'Aprobada', bg: 'oklch(90% 0.09 150)', fg: 'oklch(33% 0.12 150)' },
+      Rejected: { label: 'Rechazada', bg: 'oklch(91% 0.09 25)', fg: 'oklch(40% 0.15 25)' },
+      Cancelled: { label: 'Cancelada', bg: 'oklch(93% 0.01 260)', fg: 'oklch(45% 0.01 260)' },
+    };
+
+    let requestRows = [], queueRows = [];
+    if (me) {
+      const mine = db.requests.filter(r => r.employeeId === me.id).sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc));
+      requestRows = mine.map(r => {
+        const meta = stateMeta[r.state];
+        return {
+          id: r.id,
+          typeName: this.absenceTypeName(r.absenceTypeId),
+          startDate: r.startDate, endDate: r.endDate,
+          stateLabel: meta.label, stateBg: meta.bg, stateFg: meta.fg,
+          canEdit: r.state === 'Draft', canSubmit: r.state === 'Draft', canCancel: r.state === 'Draft' || r.state === 'Submitted',
+          canView: r.state !== 'Draft',
+          onEdit: () => this.goEditRequest(r.id),
+          onSubmit: () => this.submitRequest(r.id),
+          onCancel: () => this.requestCancel(r.id),
+          onView: () => this.goViewRequest(r.id),
+        };
+      });
+      if (me.role === 'Manager') {
+        const q = db.requests.filter(r => r.state === 'Submitted').map(r => ({ r, owner: db.employees.find(e => e.id === r.employeeId) })).filter(x => x.owner && x.owner.managerId === me.id && x.owner.id !== me.id).sort((a, b) => b.r.createdAtUtc.localeCompare(a.r.createdAtUtc));
+        queueRows = q.map(({ r, owner }) => ({ id: r.id, employeeName: owner.fullName, typeName: this.absenceTypeName(r.absenceTypeId), startDate: r.startDate, endDate: r.endDate, reason: r.reason, onApprove: () => this.openDecision(r.id, 'approve'), onReject: () => this.openDecision(r.id, 'reject') }));
+      }
+    }
+
+    let formTitle = '', formReadOnly = false, approvalBlock = null;
+    if (view === 'form') {
+      const isView = this.state.formMode === 'view';
+      formReadOnly = isView;
+      formTitle = this.state.formMode === 'create' ? 'Nueva solicitud' : (isView ? 'Detalle de la solicitud' : 'Editar borrador');
+      if (isView && this.state.formRequestId) {
+        const r = db.requests.find(x => x.id === this.state.formRequestId);
+        if (r && (r.state === 'Approved' || r.state === 'Rejected')) {
+          const ap = db.approvals.find(a => a.requestId === r.id);
+          if (ap) {
+            const manager = db.employees.find(e => e.id === ap.responsibleManagerId);
+            approvalBlock = { decisionLabel: ap.decision === 'Approved' ? 'Aprobada' : 'Rechazada', managerName: manager ? manager.fullName : '—', decidedAt: new Date(ap.decidedAtUtc).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }), comment: ap.comment };
+          }
+        }
+      }
+    }
+    const currentViewRequestCancellable = (() => {
+      if (view !== 'form' || this.state.formMode !== 'view' || !this.state.formRequestId) return false;
+      const r = db.requests.find(x => x.id === this.state.formRequestId);
+      return !!(r && r.state === 'Submitted' && me && r.employeeId === me.id);
+    })();
+
+    const isManager = me ? me.role === 'Manager' : false;
+    const navTabIsQueue = this.state.navTab === 'queue' && isManager;
+    const navTabIsRequests = !navTabIsQueue;
+    const activeBtn = 'padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;background:oklch(93% 0.03 260);color:oklch(35% 0.1 260)';
+    const inactiveBtn = 'padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;background:transparent;color:oklch(45% 0.02 260)';
+
+    const banner = this.state.banner;
+    let bannerBg = '', bannerFg = '', bannerBorder = '';
+    if (banner) {
+      if (banner.type === 'error') { bannerBg = 'oklch(95% 0.03 25)'; bannerFg = 'oklch(35% 0.15 25)'; bannerBorder = 'oklch(80% 0.1 25)'; }
+      else { bannerBg = 'oklch(93% 0.06 150)'; bannerFg = 'oklch(30% 0.12 150)'; bannerBorder = 'oklch(78% 0.1 150)'; }
+    }
+
+    const dm = this.state.decisionModal;
+    const decisionIsApprove = dm ? dm.action === 'approve' : false;
+
+    return {
+      isLoginView: view === 'login',
+      isRegisterView: view === 'register',
+      isAuthed,
+      showMyRequestsList: isAuthed && view === 'requests' && navTabIsRequests,
+      showQueueList: isAuthed && view === 'requests' && navTabIsQueue,
+      isFormView: isAuthed && view === 'form',
+      currentUserName: me ? me.fullName : '',
+      currentUserRole: me ? (me.role === 'Manager' ? 'Manager' : 'Empleado') : '',
+      isManager,
+      navRequestsStyle: navTabIsRequests ? activeBtn : inactiveBtn,
+      navQueueStyle: navTabIsQueue ? activeBtn : inactiveBtn,
+      queueCount: queueRows.length,
+      hasQueueCount: queueRows.length > 0,
+
+      loginEmail: this.state.loginFields.email,
+      loginPassword: this.state.loginFields.password,
+      loginError: this.state.loginError,
+      setLoginEmail: (e) => this.setLoginField('email', e.target.value),
+      setLoginPassword: (e) => this.setLoginField('password', e.target.value),
+      submitLogin: (e) => { e.preventDefault(); this.doLogin(); },
+      goToRegister: (e) => { e.preventDefault(); this.setState({ view: 'register', loginError: null }); },
+
+      regFullName: this.state.registerFields.fullName,
+      regEmail: this.state.registerFields.email,
+      regPassword: this.state.registerFields.password,
+      regRoleEmployeeChecked: this.state.registerFields.role === 'Employee',
+      regRoleManagerChecked: this.state.registerFields.role === 'Manager',
+      regErrFullName: this.state.registerErrors.fullName || null,
+      regErrEmail: this.state.registerErrors.email || null,
+      regErrPassword: this.state.registerErrors.password || null,
+      setRegFullName: (e) => this.setRegisterField('fullName', e.target.value),
+      setRegEmail: (e) => this.setRegisterField('email', e.target.value),
+      setRegPassword: (e) => this.setRegisterField('password', e.target.value),
+      setRegRoleEmployee: () => this.setRegisterField('role', 'Employee'),
+      setRegRoleManager: () => this.setRegisterField('role', 'Manager'),
+      submitRegister: (e) => { e.preventDefault(); this.doRegister(); },
+      goToLogin: (e) => { e.preventDefault(); this.setState({ view: 'login', registerErrors: {} }); },
+      saving: this.state.saving,
+
+      logout: this.doLogout,
+      goRequestsTab: this.goRequests,
+      goQueueTab: this.goQueue,
+
+      banner, bannerBg, bannerFg, bannerBorder,
+      dismissBanner: this.dismissBanner,
+
+      listLoading: this.state.listLoading,
+      listNotLoading: !this.state.listLoading,
+      requestRows, hasRequestRows: requestRows.length > 0, hasNoRequestRows: requestRows.length === 0,
+      goNewRequest: this.goNewRequest,
+
+      queueRows, hasQueueRows: queueRows.length > 0, hasNoQueueRows: queueRows.length === 0,
+
+      formTitle, formReadOnly, formEditable: !formReadOnly,
+      saveLabel: this.state.formMode === 'create' ? 'Guardar borrador' : 'Guardar cambios',
+      cancelBtnLabel: formReadOnly ? 'Volver' : 'Cancelar',
+      typeOptions,
+      formAbsenceTypeId: this.state.formFields.absenceTypeId,
+      formStartDate: this.state.formFields.startDate,
+      formEndDate: this.state.formFields.endDate,
+      formReason: this.state.formFields.reason,
+      reasonCount: (this.state.formFields.reason || '').length,
+      todayStr: this.todayStr(),
+      formErrAbsenceType: this.state.formErrors.absenceTypeId || null,
+      formErrStartDate: this.state.formErrors.startDate || null,
+      formErrEndDate: this.state.formErrors.endDate || null,
+      formErrReason: this.state.formErrors.reason || null,
+      formErrGeneral: this.state.formErrors.general || null,
+      setFormAbsenceType: (e) => this.setFormField('absenceTypeId', e.target.value),
+      setFormStartDate: (e) => this.setFormField('startDate', e.target.value),
+      setFormEndDate: (e) => this.setFormField('endDate', e.target.value),
+      setFormReason: (e) => this.setFormField('reason', e.target.value),
+      saveForm: this.saveForm,
+      backToList: this.backToList,
+      approvalBlock,
+      currentViewRequestCancellable,
+      cancelFromDetail: () => this.requestCancel(this.state.formRequestId),
+
+      cancelConfirmId: this.state.cancelConfirmId,
+      closeCancelConfirm: this.closeCancelConfirm,
+      confirmCancel: this.confirmCancel,
+      stopClick: this.stopClick,
+
+      decisionModal: dm,
+      decisionCommentVal: dm ? dm.comment : '',
+      decisionModalTitle: dm ? (decisionIsApprove ? '¿Aprobar esta solicitud?' : '¿Rechazar esta solicitud?') : '',
+      decisionConfirmLabel: decisionIsApprove ? 'Aprobar' : 'Rechazar',
+      decisionConfirmBg: decisionIsApprove ? 'oklch(55% 0.14 150)' : 'oklch(55% 0.18 25)',
+      setDecisionCommentEv: (e) => this.setDecisionComment(e.target.value),
+      closeDecision: this.closeDecision,
+      confirmDecision: this.confirmDecision,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

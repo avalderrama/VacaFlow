@@ -6,7 +6,9 @@ Employees register, log in, create and submit absence requests. Managers log in 
 
 > **Status: documentation baseline complete, implementation not started.** The six planning documents below are published (milestone `M0`). No application code has been written yet — this README gains setup and run instructions once the solution is scaffolded (work package `3.1`).
 >
-> **Open decision blocking work package `6.1`:** registration collects name, email, password and role but never sets a manager assignment, while approval requires the manager assigned to the employee. See `OQ-01` in [`docs/Intent.md`](docs/Intent.md) §15.
+> **Product language: English** throughout — interface, code, data values and documentation. Note that the prototype in `docs/prototype/` was built with Spanish copy; it is authoritative for layout and interaction, never for strings. See [`docs/Backlog.md`](docs/Backlog.md) §2 and §3.5.
+>
+> **Open decision:** how an employee's manager assignment is established. The prototype falls back to "the first manager in the table", which works for the demo but is not a business rule. See `OQ-01` in [`docs/Backlog.md`](docs/Backlog.md) §6.
 
 ## Scope in one line
 
@@ -19,7 +21,8 @@ The authoritative scope boundary is [`docs/Intent.md`](docs/Intent.md). Anything
 | Document | Purpose | Status |
 |---|---|---|
 | [`docs/Intent.md`](docs/Intent.md) | Project summary, scope, out of scope, business / technical / legal constraints, rules, acceptance criteria | ✅ Baseline v1.0 |
-| [`docs/Backlog.md`](docs/Backlog.md) | User stories covering the whole solution and the MVP | ✅ Baseline v1.0 |
+| [`docs/Backlog.md`](docs/Backlog.md) | User stories covering the whole solution and the MVP, with per-screen visual criteria | ✅ **v2.0** |
+| [`docs/prototype/`](docs/prototype/) | Functional prototype — 11 screens and the markup that is the design source for the backlog | ✅ Reference |
 | [`docs/FRD.md`](docs/FRD.md) | Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/NFR.md`](docs/NFR.md) | Non-Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document | ✅ Baseline v1.0 |
