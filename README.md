@@ -17,9 +17,9 @@ The authoritative scope boundary is [`docs/Intent.md`](docs/Intent.md). Anything
 | Document | Purpose | Status |
 |---|---|---|
 | [`docs/Intent.md`](docs/Intent.md) | Project summary, scope, out of scope, business / technical / legal constraints, rules, acceptance criteria | ✅ Baseline v1.0 |
+| [`docs/Backlog.md`](docs/Backlog.md) | User stories covering the whole solution and the MVP | ✅ Baseline v1.0 |
 | `docs/FRD.md` | Functional Requirement Document | ⬜ Pending |
 | `docs/NFR.md` | Non-Functional Requirement Document | ⬜ Pending |
-| `docs/Backlog.md` | User stories covering the MVP | ⬜ Pending |
 | `docs/SAD.md` | Software Architecture Document | ⬜ Pending |
 | `docs/WBS.md` | Work Breakdown Structure | ⬜ Pending |
 
