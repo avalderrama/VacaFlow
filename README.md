@@ -4,7 +4,9 @@ Internal vacation and absence request workflow — limited MVP for **BIG Solutio
 
 Employees register, log in, create and submit absence requests. Managers log in and approve or reject the requests assigned to them. The system records the final state and the authenticated manager responsible for the decision.
 
-> **Status: documentation phase.** No application code has been written yet. This README will be replaced with setup and run instructions once the solution is scaffolded.
+> **Status: documentation baseline complete, implementation not started.** The six planning documents below are published (milestone `M0`). No application code has been written yet — this README gains setup and run instructions once the solution is scaffolded (work package `3.1`).
+>
+> **Open decision blocking work package `6.1`:** registration collects name, email, password and role but never sets a manager assignment, while approval requires the manager assigned to the employee. See `OQ-01` in [`docs/Intent.md`](docs/Intent.md) §15.
 
 ## Scope in one line
 
@@ -21,7 +23,7 @@ The authoritative scope boundary is [`docs/Intent.md`](docs/Intent.md). Anything
 | [`docs/FRD.md`](docs/FRD.md) | Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/NFR.md`](docs/NFR.md) | Non-Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document | ✅ Baseline v1.0 |
-| `docs/WBS.md` | Work Breakdown Structure | ⬜ Pending |
+| [`docs/WBS.md`](docs/WBS.md) | Work Breakdown Structure | ✅ Baseline v1.0 |
 
 Normative rule sets applied to this project (`Docs/` in the project workspace, outside this repository):
 
