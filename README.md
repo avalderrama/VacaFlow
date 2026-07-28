@@ -20,7 +20,7 @@ The authoritative scope boundary is [`docs/Intent.md`](docs/Intent.md). Anything
 | [`docs/Backlog.md`](docs/Backlog.md) | User stories covering the whole solution and the MVP | ✅ Baseline v1.0 |
 | [`docs/FRD.md`](docs/FRD.md) | Functional Requirement Document | ✅ Baseline v1.0 |
 | [`docs/NFR.md`](docs/NFR.md) | Non-Functional Requirement Document | ✅ Baseline v1.0 |
-| `docs/SAD.md` | Software Architecture Document | ⬜ Pending |
+| [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document | ✅ Baseline v1.0 |
 | `docs/WBS.md` | Work Breakdown Structure | ⬜ Pending |
 
 Normative rule sets applied to this project (`Docs/` in the project workspace, outside this repository):
