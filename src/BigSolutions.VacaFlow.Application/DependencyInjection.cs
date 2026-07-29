@@ -1,3 +1,4 @@
+using BigSolutions.VacaFlow.Application.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BigSolutions.VacaFlow.Application;
@@ -15,8 +16,10 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // Handlers are registered here as they are written, one line each.
-        // Work packages 4.2 to 6.2 fill this in; see WBS.md §3.
+        services.AddScoped<RegisterEmployeeHandler>();
+
+        // Further handlers are registered here as they are written, one line
+        // each. Work packages 4.3 to 6.2 fill this in; see WBS.md §3.
         return services;
     }
 }

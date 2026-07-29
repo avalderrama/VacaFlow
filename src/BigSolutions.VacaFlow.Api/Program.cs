@@ -1,5 +1,9 @@
+using BigSolutions.VacaFlow.Api.Endpoints;
+using BigSolutions.VacaFlow.Api.ErrorHandling;
 using BigSolutions.VacaFlow.Application;
+using BigSolutions.VacaFlow.Application.Abstractions;
 using BigSolutions.VacaFlow.Infrastructure;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 // ---------------------------------------------------------------------------
 // Composition root (CA-CFG-001). This file is the only place in the solution
@@ -21,12 +25,54 @@ builder.Services.AddSingleton(TimeProvider.System);
 // inward (SAD §6.3).
 // builder.Services.AddScoped<ICurrentUser, CurrentUserAccessor>();   // WP 4.4
 
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "VacaFlow.Session";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+
+        // This is an API, not an MVC app with a login page: an unauthenticated
+        // call must return 401/403 JSON, not a 302 redirect to a page that
+        // does not exist (NFR-SEC-005).
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
 
-// Endpoint groups are mapped here as they are written. Work packages 4.2 to 6.3;
-// see WBS.md §3.
+// Applying migrations at startup needs its own scope: the composition root is
+// exempt from CA-CFG-003, but the resolved services still follow their normal
+// scoped lifetime (FR-DAT-001).
+using (var startupScope = app.Services.CreateScope())
+{
+    var initializer = startupScope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
+    await initializer.InitializeAsync(CancellationToken.None);
+}
+
+app.UseExceptionHandler();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }))
    .WithName("Health");
+
+app.MapAuthEndpoints();
 
 app.Run();
 
