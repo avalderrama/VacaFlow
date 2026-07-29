@@ -1,3 +1,9 @@
+using BigSolutions.VacaFlow.Application.Abstractions;
+using BigSolutions.VacaFlow.Infrastructure.Identifiers;
+using BigSolutions.VacaFlow.Infrastructure.Persistence;
+using BigSolutions.VacaFlow.Infrastructure.Persistence.Repositories;
+using BigSolutions.VacaFlow.Infrastructure.Security;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,9 +38,17 @@ public static class DependencyInjection
                 "Set ConnectionStrings:VacaFlow in configuration before starting the API.");
         }
 
-        // DbContext, repositories, unit of work, password hasher and the seeder
-        // are registered here. Work packages 3.3 and 3.4 fill this in; see
-        // WBS.md §3 and SAD.md §7.
+        services.AddDbContext<VacaFlowDbContext>(options => options.UseSqlite(connectionString));
+
+        services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<ICredentialStore, CredentialStore>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
+
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddSingleton<IIdGenerator, GuidIdGenerator>();
+
+        // The seeder joins this list with TE-003; not needed by US-007.
         return services;
     }
 }
