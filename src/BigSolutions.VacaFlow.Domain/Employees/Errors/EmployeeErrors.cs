@@ -19,6 +19,25 @@ public static class EmployeeErrors
         "Enter a valid email address, for example name@company.com",
         Field: "email");
 
+    /// <remarks>
+    /// Deliberately field-less. A wrong password and an unknown email must be
+    /// indistinguishable (FR-AUT-006), so this cannot be attached to either
+    /// input — attaching it to "email" would confirm the address exists. It
+    /// renders in the form-level alert block instead.
+    /// </remarks>
+    public static readonly Error InvalidCredentials = new(
+        "VF-AUT-002",
+        "The email or password is incorrect.");
+
+    /// <remarks>
+    /// Only ever reachable after the password has already been verified, so it
+    /// discloses nothing to someone who does not hold the credentials. See
+    /// SignInHandler for why that ordering is deliberate.
+    /// </remarks>
+    public static readonly Error AccountInactive = new(
+        "VF-AUT-003",
+        "This account is not active.");
+
     public static readonly Error FullNameRequired = new(
         "VF-VAL-001",
         "Full name is required (max 120 characters).",

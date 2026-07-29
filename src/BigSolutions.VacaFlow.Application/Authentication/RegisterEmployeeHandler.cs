@@ -18,20 +18,20 @@ public sealed class RegisterEmployeeHandler(
     IUnitOfWork unitOfWork,
     IIdGenerator idGenerator)
 {
-    public async Task<Result<RegisteredAccountDto>> Handle(
+    public async Task<Result<AuthenticatedUserDto>> Handle(
         RegisterEmployeeCommand command,
         CancellationToken cancellationToken)
     {
         var validation = command.Validate();
         if (validation.IsFailure)
         {
-            return Result.Failure<RegisteredAccountDto>(validation.Error);
+            return Result.Failure<AuthenticatedUserDto>(validation.Error);
         }
 
         var emailResult = Email.Create(command.Email);
         if (emailResult.IsFailure)
         {
-            return Result.Failure<RegisteredAccountDto>(emailResult.Error);
+            return Result.Failure<AuthenticatedUserDto>(emailResult.Error);
         }
 
         var email = emailResult.Value;
@@ -41,7 +41,7 @@ public sealed class RegisterEmployeeHandler(
         // check and the insert — both checks are deliberate (plan §3.1).
         if (await employees.EmailExistsAsync(email, cancellationToken))
         {
-            return Result.Failure<RegisteredAccountDto>(EmployeeErrors.EmailAlreadyRegistered);
+            return Result.Failure<AuthenticatedUserDto>(EmployeeErrors.EmailAlreadyRegistered);
         }
 
         var employeeResult = Employee.Create(
@@ -52,7 +52,7 @@ public sealed class RegisterEmployeeHandler(
 
         if (employeeResult.IsFailure)
         {
-            return Result.Failure<RegisteredAccountDto>(employeeResult.Error);
+            return Result.Failure<AuthenticatedUserDto>(employeeResult.Error);
         }
 
         var employee = employeeResult.Value;
@@ -64,10 +64,10 @@ public sealed class RegisterEmployeeHandler(
         var saveResult = await unitOfWork.SaveChangesAsync(cancellationToken);
         if (saveResult.IsFailure)
         {
-            return Result.Failure<RegisteredAccountDto>(saveResult.Error);
+            return Result.Failure<AuthenticatedUserDto>(saveResult.Error);
         }
 
-        return Result.Success(new RegisteredAccountDto(
+        return Result.Success(new AuthenticatedUserDto(
             employee.Id.Value,
             employee.FullName,
             employee.Email.Value,

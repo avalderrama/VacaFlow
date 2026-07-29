@@ -19,5 +19,11 @@ internal sealed class EmployeeRepository(VacaFlowDbContext dbContext) : IEmploye
     public Task<bool> EmailExistsAsync(Email email, CancellationToken cancellationToken) =>
         dbContext.Employees.AnyAsync(employee => employee.Email == email, cancellationToken);
 
+    /// <remarks>
+    /// Same EF Core translation caveat as <see cref="EmailExistsAsync"/> above.
+    /// </remarks>
+    public Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken) =>
+        dbContext.Employees.FirstOrDefaultAsync(employee => employee.Email == email, cancellationToken);
+
     public void Add(Employee employee) => dbContext.Employees.Add(employee);
 }

@@ -58,12 +58,12 @@ public sealed class RegisterEmployeeHandlerTests
     }
 
     [Fact]
-    public void RegisteredAccountDto_Should_Have_No_Password_Or_Hash_Property()
+    public void AuthenticatedUserDto_Should_Have_No_Password_Or_Hash_Property()
     {
-        // Structural guarantee, not a runtime one: RegisteredAccountDto (CA-APP-006)
+        // Structural guarantee, not a runtime one: AuthenticatedUserDto (CA-APP-006)
         // simply has no field that could carry a hash, so there is nothing to leak
         // (NFR-SEC-002).
-        var properties = typeof(RegisteredAccountDto).GetProperties().Select(p => p.Name);
+        var properties = typeof(AuthenticatedUserDto).GetProperties().Select(p => p.Name);
 
         Assert.DoesNotContain(properties, name =>
             name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
