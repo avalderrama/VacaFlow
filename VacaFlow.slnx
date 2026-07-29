@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BigSolutions.VacaFlow.Api/BigSolutions.VacaFlow.Api.csproj" />
+    <Project Path="src/BigSolutions.VacaFlow.Application/BigSolutions.VacaFlow.Application.csproj" />
+    <Project Path="src/BigSolutions.VacaFlow.Domain/BigSolutions.VacaFlow.Domain.csproj" />
+    <Project Path="src/BigSolutions.VacaFlow.Infrastructure/BigSolutions.VacaFlow.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BigSolutions.VacaFlow.Application.UnitTests/BigSolutions.VacaFlow.Application.UnitTests.csproj" />
+    <Project Path="tests/BigSolutions.VacaFlow.ArchitectureTests/BigSolutions.VacaFlow.ArchitectureTests.csproj" />
+    <Project Path="tests/BigSolutions.VacaFlow.Domain.UnitTests/BigSolutions.VacaFlow.Domain.UnitTests.csproj" />
+    <Project Path="tests/BigSolutions.VacaFlow.Infrastructure.IntegrationTests/BigSolutions.VacaFlow.Infrastructure.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
