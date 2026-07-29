@@ -27,8 +27,35 @@ internal static class ResultExtensions
             ? Results.Ok(body(result.Value))
             : ToProblem(result.Error);
 
+    private static object ErrorBody(Error error) =>
+        new { code = error.Code, message = error.Message, field = error.Field };
+
     private static IResult ToProblem(Error error) =>
-        Results.Json(
-            new { code = error.Code, message = error.Message, field = error.Field },
-            statusCode: ErrorStatusMap.StatusFor(error.Code));
+        Results.Json(ErrorBody(error), statusCode: ErrorStatusMap.StatusFor(error.Code));
+
+    /// <summary>
+    /// Same wire shape as <see cref="ToProblem"/>, for the one caller that
+    /// cannot return an <see cref="IResult"/> — the cookie authentication
+    /// events in the composition root, which only get an <see cref="HttpResponse"/>.
+    /// A disconnected client cancels the write rather than surfacing as an
+    /// unhandled exception the global handler would have to untangle.
+    /// </summary>
+    public static async Task WriteErrorAsync(this HttpResponse response, Error error)
+    {
+        response.StatusCode = ErrorStatusMap.StatusFor(error.Code);
+
+        try
+        {
+            await response.WriteAsJsonAsync(ErrorBody(error), response.HttpContext.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            // The client disconnected before the body finished writing.
+        }
+        catch (IOException)
+        {
+            // Kestrel surfaces an abrupt reset as this instead of a
+            // cancellation — same "nothing left to write to" outcome.
+        }
+    }
 }
