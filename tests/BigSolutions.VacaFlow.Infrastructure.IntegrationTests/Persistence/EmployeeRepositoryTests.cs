@@ -82,6 +82,43 @@ public sealed class EmployeeRepositoryTests(SqliteDatabaseFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task GetByEmailAsync_Should_Return_The_Employee_Regardless_Of_The_Requested_Casing()
+    {
+        var email = $"lookup-{Guid.NewGuid():N}@vacaflow.test";
+        var employee = NewEmployee(email);
+
+        await using (var writeScope = fixture.Services.CreateAsyncScope())
+        {
+            writeScope.ServiceProvider.GetRequiredService<IEmployeeRepository>().Add(employee);
+            await writeScope.ServiceProvider.GetRequiredService<IUnitOfWork>()
+                .SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var repository = readScope.ServiceProvider.GetRequiredService<IEmployeeRepository>();
+
+        var found = await repository.GetByEmailAsync(Email.Create(email).Value, CancellationToken.None);
+        var foundUpperCased = await repository.GetByEmailAsync(
+            Email.Create(email.ToUpperInvariant()).Value, CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(employee.Id, found.Id);
+        Assert.NotNull(foundUpperCased);
+        Assert.Equal(employee.Id, foundUpperCased.Id);
+    }
+
+    [Fact]
+    public async Task GetByEmailAsync_Should_Return_Null_For_An_Email_Never_Registered()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+
+        var found = await scope.ServiceProvider.GetRequiredService<IEmployeeRepository>()
+            .GetByEmailAsync(Email.Create($"absent-{Guid.NewGuid():N}@vacaflow.test").Value, CancellationToken.None);
+
+        Assert.Null(found);
+    }
+
+    [Fact]
     public async Task A_Constraint_Violation_That_Is_Not_Email_Uniqueness_Should_Not_Be_Translated()
     {
         // Storing a credential for an employee that does not exist violates the
