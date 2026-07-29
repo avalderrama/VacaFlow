@@ -2,8 +2,10 @@ using BigSolutions.VacaFlow.Api.Endpoints;
 using BigSolutions.VacaFlow.Api.ErrorHandling;
 using BigSolutions.VacaFlow.Application;
 using BigSolutions.VacaFlow.Application.Abstractions;
+using BigSolutions.VacaFlow.Domain.Employees.Errors;
 using BigSolutions.VacaFlow.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 
 // ---------------------------------------------------------------------------
 // Composition root (CA-CFG-001). This file is the only place in the solution
@@ -39,10 +41,11 @@ builder.Services
         // call must return 401/403 JSON, not a 302 redirect to a page that
         // does not exist (NFR-SEC-005).
         options.Events.OnRedirectToLogin = context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        };
+            context.Response.WriteErrorAsync(EmployeeErrors.NotAuthenticated);
+        // No endpoint issues a role-based challenge yet (that starts with
+        // US-021's manager-only actions), so there is no §7 code to attach a
+        // body to. Give this the same treatment as OnRedirectToLogin once one
+        // exists.
         options.Events.OnRedirectToAccessDenied = context =>
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -50,7 +53,15 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+// FR-AUT-011: every endpoint requires an authenticated caller unless it opts
+// out with AllowAnonymous(). A fallback policy makes that a structural
+// guarantee instead of a convention every new endpoint has to remember.
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -70,7 +81,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }))
-   .WithName("Health");
+   .WithName("Health")
+   .AllowAnonymous();
 
 app.MapAuthEndpoints();
 

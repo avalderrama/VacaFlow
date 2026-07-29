@@ -54,6 +54,19 @@ internal static class AuthEndpoints
             return result.ToOkResult(ToResponse);
         })
         .AllowAnonymous();
+
+        // Nothing to decide here (US-009): invalidating the cookie is a
+        // framework concern, not a business rule, so there is no handler.
+        // The fallback policy in Program.cs already requires a session on any
+        // endpoint that does not opt out — RequireAuthorization() is stated
+        // here too so the contract reads locally instead of only in a comment
+        // in another file.
+        group.MapPost("/logout", async (HttpContext httpContext) =>
+        {
+            await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Results.NoContent();
+        })
+        .RequireAuthorization();
     }
 
     private static Task SignInAsync(HttpContext httpContext, AuthenticatedUserDto user) =>

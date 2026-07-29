@@ -674,6 +674,7 @@ Logging uses `ILogger<T>` from `Microsoft.Extensions.Logging.Abstractions` in Ap
 **Decision.** ASP.NET Core cookie authentication, `HttpOnly`, `SameSite=Lax`.
 **Alternatives.** A JWT in `localStorage` — rejected: readable by any injected script, and logout cannot truly invalidate it. A JWT in memory — rejected: lost on refresh, requiring refresh-token machinery.
 **Consequence.** `FR-AUT-008` works as specified; the frontend stores no credential material.
+**Amendment (`US-009`).** "Works as specified" needs a precise reading: there is no server-side ticket store, so `POST /auth/logout` deletes the browser's cookie but the encrypted ticket itself stays valid for any holder until `ExpireTimeSpan` (8 hours, sliding). A ticket copied before logout — XSS, a shared machine, a logged proxy — is not revoked by that logout. This is the same class of problem the JWT alternative was rejected for, at a smaller scale (8 hours, not unbounded). Accepted as an MVP limitation: `NFR-SEC-005`'s "invalidated on logout" is satisfied for the cooperative client (the only client that exists), not against a copied credential. Real revocation needs an `ITicketStore` keyed by a per-user stamp checked in `ValidatePrincipal` — no story in the current backlog asks for it; flagged for the sponsor to prioritize if session hijacking is in scope for a future increment.
 
 ### `ADR-004` — `Approval` is part of the `Request` aggregate
 **Decision.** `Approval` is a child entity of `Request`, not a separate aggregate root.
@@ -997,6 +998,8 @@ Two processes, one file, no container, no external service (`NFR-POR-001`, `NFR-
 | `WBS.md` §3 | New package for `Infrastructure.IntegrationTests`, ≈ **+0.5 d** (§14.2); plus the ≈ +2 d already identified by `Backlog.md` v2.0 | `CA-TST-004` |
 | `NFR.md` §5 | `NFR-MNT-008` targets ≥ 90/100; §16 projects 96 **conditional on `OQ-03`** — the conditionality should be stated there too | `DV-01` |
 | `Intent.md` §15 | `OQ-03` is no longer a formality; §16 shows it decides between a 96 and a 59 | `DV-01` |
+| `SAD.md` §8.5 | §8.5 said `.RequireAuthorization()` at the endpoint is what gates access. Since `US-009`, a global `FallbackPolicy` (`RequireAuthenticatedUser`) denies by default and every endpoint must opt out with `AllowAnonymous()` instead of opting in — the stronger reading of `FR-AUT-011`. `/logout` still states `.RequireAuthorization()` locally for readability, but the guarantee no longer depends on it | `US-009` |
+| `SAD.md` `ADR-003` | Amended: logout is client-cooperative cookie deletion, not server-side ticket revocation — see the amendment inline | `US-009` |
 
 ---
 

@@ -63,4 +63,13 @@ public static class EmployeeErrors
         "VF-VAL-001",
         "Select a valid role.",
         Field: "role");
+
+    /// <remarks>
+    /// Not raised by a handler — the cookie authentication middleware returns
+    /// this directly on every endpoint that requires a session, so no field is
+    /// attached (FR-AUT-011).
+    /// </remarks>
+    public static readonly Error NotAuthenticated = new(
+        "VF-AUT-004",
+        "You must be signed in to perform this action.");
 }
