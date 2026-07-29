@@ -10,5 +10,7 @@ public interface IEmployeeRepository
 {
     Task<bool> EmailExistsAsync(Email email, CancellationToken cancellationToken);
 
+    Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken);
+
     void Add(Employee employee);
 }

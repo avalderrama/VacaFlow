@@ -12,6 +12,8 @@ internal static class ErrorStatusMap
     {
         ["VF-VAL-001"] = StatusCodes.Status400BadRequest,
         ["VF-AUT-001"] = StatusCodes.Status409Conflict,
+        ["VF-AUT-002"] = StatusCodes.Status401Unauthorized,
+        ["VF-AUT-003"] = StatusCodes.Status403Forbidden,
         ["VF-AUT-004"] = StatusCodes.Status401Unauthorized,
     };
 

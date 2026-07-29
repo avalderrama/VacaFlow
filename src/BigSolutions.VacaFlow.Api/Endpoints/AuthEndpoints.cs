@@ -27,27 +27,49 @@ internal static class AuthEndpoints
 
             if (result.IsSuccess)
             {
-                await httpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    BuildPrincipal(result.Value));
+                await SignInAsync(httpContext, result.Value);
             }
 
-            return result.ToCreatedResult(
-                _ => "/api/auth/me",
-                account => new RegisterAccountResponse(account.Id, account.FullName, account.Email, account.Role));
+            return result.ToCreatedResult(_ => "/api/auth/me", ToResponse);
         })
         // Registration is anonymous by definition. Stated explicitly so that a
         // future fallback authorization policy cannot lock out the one endpoint
         // that has to be reachable without an account.
         .AllowAnonymous();
+
+        group.MapPost("/login", async (
+            SignInContract contract,
+            SignInHandler handler,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(
+                new SignInCommand(contract.Email, contract.Password), cancellationToken);
+
+            if (result.IsSuccess)
+            {
+                await SignInAsync(httpContext, result.Value);
+            }
+
+            return result.ToOkResult(ToResponse);
+        })
+        .AllowAnonymous();
     }
 
-    private static ClaimsPrincipal BuildPrincipal(RegisteredAccountDto account)
+    private static Task SignInAsync(HttpContext httpContext, AuthenticatedUserDto user) =>
+        httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            BuildPrincipal(user));
+
+    private static AuthenticatedUserResponse ToResponse(AuthenticatedUserDto user) =>
+        new(user.Id, user.FullName, user.Email, user.Role);
+
+    private static ClaimsPrincipal BuildPrincipal(AuthenticatedUserDto user)
     {
         var identity = new ClaimsIdentity(
         [
-            new Claim(ClaimTypes.NameIdentifier, account.Id.ToString()),
-            new Claim(ClaimTypes.Role, account.Role),
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Role, user.Role),
         ], CookieAuthenticationDefaults.AuthenticationScheme);
 
         return new ClaimsPrincipal(identity);

@@ -7,14 +7,26 @@ namespace BigSolutions.VacaFlow.Application.UnitTests.Authentication.Fakes;
 internal sealed class FakeEmployeeRepository : IEmployeeRepository
 {
     private readonly HashSet<string> _existingEmails;
+    private readonly Dictionary<string, Employee> _employeesByEmail = [];
 
     public FakeEmployeeRepository(params string[] existingEmails) =>
         _existingEmails = new HashSet<string>(existingEmails, StringComparer.Ordinal);
 
     public List<Employee> AddedEmployees { get; } = [];
 
+    /// <summary>Seeds an employee that <see cref="GetByEmailAsync"/> will return.</summary>
+    public FakeEmployeeRepository WithEmployee(Employee employee)
+    {
+        _employeesByEmail[employee.Email.Value] = employee;
+        _existingEmails.Add(employee.Email.Value);
+        return this;
+    }
+
     public Task<bool> EmailExistsAsync(Email email, CancellationToken cancellationToken) =>
         Task.FromResult(_existingEmails.Contains(email.Value));
+
+    public Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken) =>
+        Task.FromResult(_employeesByEmail.GetValueOrDefault(email.Value));
 
     public void Add(Employee employee) => AddedEmployees.Add(employee);
 }

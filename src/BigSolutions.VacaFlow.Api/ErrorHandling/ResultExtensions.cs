@@ -20,6 +20,13 @@ internal static class ResultExtensions
             ? Results.Created(location(result.Value), body(result.Value))
             : ToProblem(result.Error);
 
+    public static IResult ToOkResult<TValue, TBody>(
+        this Result<TValue> result,
+        Func<TValue, TBody> body) =>
+        result.IsSuccess
+            ? Results.Ok(body(result.Value))
+            : ToProblem(result.Error);
+
     private static IResult ToProblem(Error error) =>
         Results.Json(
             new { code = error.Code, message = error.Message, field = error.Field },
