@@ -25,5 +25,15 @@ internal sealed class EmployeeRepository(VacaFlowDbContext dbContext) : IEmploye
     public Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken) =>
         dbContext.Employees.FirstOrDefaultAsync(employee => employee.Email == email, cancellationToken);
 
+    /// <remarks>
+    /// Same converter-mediated comparison as <see cref="EmailExistsAsync"/>,
+    /// with lower risk: EmployeeId wraps a single Guid with no plausible
+    /// second atomic value and is never regenerated, so the equality the
+    /// converter's SQL expresses cannot drift from EmployeeId's own
+    /// operator== the way Email's could.
+    /// </remarks>
+    public Task<Employee?> GetByIdAsync(EmployeeId id, CancellationToken cancellationToken) =>
+        dbContext.Employees.FirstOrDefaultAsync(employee => employee.Id == id, cancellationToken);
+
     public void Add(Employee employee) => dbContext.Employees.Add(employee);
 }

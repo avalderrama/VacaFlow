@@ -119,6 +119,41 @@ public sealed class EmployeeRepositoryTests(SqliteDatabaseFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task GetByIdAsync_Should_Return_The_Employee_With_Its_Full_Data()
+    {
+        var email = $"by-id-{Guid.NewGuid():N}@vacaflow.test";
+        var employee = NewEmployee(email, EmployeeRole.Manager);
+
+        await using (var writeScope = fixture.Services.CreateAsyncScope())
+        {
+            writeScope.ServiceProvider.GetRequiredService<IEmployeeRepository>().Add(employee);
+            await writeScope.ServiceProvider.GetRequiredService<IUnitOfWork>()
+                .SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var found = await readScope.ServiceProvider.GetRequiredService<IEmployeeRepository>()
+            .GetByIdAsync(employee.Id, CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(employee.Id, found.Id);
+        Assert.Equal("Integration Test Employee", found.FullName);
+        Assert.Equal(email, found.Email.Value);
+        Assert.Equal(EmployeeRole.Manager, found.Role);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_Should_Return_Null_For_An_Id_Never_Registered()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+
+        var found = await scope.ServiceProvider.GetRequiredService<IEmployeeRepository>()
+            .GetByIdAsync(new EmployeeId(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(found);
+    }
+
+    [Fact]
     public async Task A_Constraint_Violation_That_Is_Not_Email_Uniqueness_Should_Not_Be_Translated()
     {
         // Storing a credential for an employee that does not exist violates the

@@ -18,6 +18,7 @@ public static class DependencyInjection
     {
         services.AddScoped<RegisterEmployeeHandler>();
         services.AddScoped<SignInHandler>();
+        services.AddScoped<GetCurrentUserHandler>();
 
         // Further handlers are registered here as they are written, one line
         // each. Work packages 4.3 to 6.2 fill this in; see WBS.md §3.

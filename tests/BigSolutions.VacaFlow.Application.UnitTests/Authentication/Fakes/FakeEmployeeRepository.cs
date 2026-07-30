@@ -14,7 +14,10 @@ internal sealed class FakeEmployeeRepository : IEmployeeRepository
 
     public List<Employee> AddedEmployees { get; } = [];
 
-    /// <summary>Seeds an employee that <see cref="GetByEmailAsync"/> will return.</summary>
+    /// <summary>
+    /// Seeds an employee that <see cref="GetByEmailAsync"/> and
+    /// <see cref="GetByIdAsync"/> will return.
+    /// </summary>
     public FakeEmployeeRepository WithEmployee(Employee employee)
     {
         _employeesByEmail[employee.Email.Value] = employee;
@@ -27,6 +30,9 @@ internal sealed class FakeEmployeeRepository : IEmployeeRepository
 
     public Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken) =>
         Task.FromResult(_employeesByEmail.GetValueOrDefault(email.Value));
+
+    public Task<Employee?> GetByIdAsync(EmployeeId id, CancellationToken cancellationToken) =>
+        Task.FromResult(_employeesByEmail.Values.FirstOrDefault(employee => employee.Id == id));
 
     public void Add(Employee employee) => AddedEmployees.Add(employee);
 }
