@@ -53,11 +53,19 @@ dotnet test VacaFlow.slnx
 
 ### Resetting the database
 
-Stop the API, delete `vacaflow.db` from the API project folder, start again. Migrations and the seeder rebuild a clean state (`FR-DAT-006`, `NFR-OPS-001`). *Applies once work package `3.3` lands.*
+Stop the API, delete `vacaflow.db` (and any `vacaflow.db-shm` / `vacaflow.db-wal`) from the API project folder, start again. Migrations and the seeder rebuild a clean state (`FR-DAT-006`, `NFR-OPS-001`).
 
 ### Seeded accounts
 
-Documented in [`docs/Backlog.md`](docs/Backlog.md) §3.6. They are clearly non-production and must never be reused anywhere real. *Applies once work package `3.4` lands.*
+> ⚠️ **Non-production credentials.** These accounts exist only to make the MVP demonstrable without registering first. The emails use the `.test` domain reserved for exactly this purpose and must never be reused anywhere real.
+
+| Name | Email | Password | Role | Manager |
+|---|---|---|---|---|
+| Laura Méndez | `manager@vacaflow.test` | `Manager123!` | Manager | — |
+| Carlos Ruiz | `employee@vacaflow.test` | `Employee123!` | Employee | Laura Méndez |
+| Ana Torres | `ana@vacaflow.test` | `Employee123!` | Employee | Laura Méndez |
+
+Seeded on every startup against a database that does not already have them (`TE-003`) — restarting against an existing database creates no duplicates. See [`docs/Backlog.md`](docs/Backlog.md) §3.6.
 
 ---
 

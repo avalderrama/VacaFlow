@@ -39,9 +39,10 @@ public sealed class Employee : AggregateRoot<EmployeeId>
     public bool IsActive { get; private set; }
 
     /// <summary>
-    /// The simple manager assignment (Intent.md BC-04). Null until OQ-01 is
-    /// resolved — no registration flow sets this yet, and no fallback is
-    /// encoded here (SAD.md §5.4).
+    /// The simple manager assignment (Intent.md BC-04). Null until something
+    /// calls <see cref="AssignManager"/> — no registration flow does that yet
+    /// (OQ-01 is still open), so the only caller in the MVP is the seeder
+    /// (TE-003), which fixes it directly from Backlog.md §3.6.
     /// </summary>
     public EmployeeId? ManagerId { get; private set; }
 
@@ -53,5 +54,25 @@ public sealed class Employee : AggregateRoot<EmployeeId>
         }
 
         return Result.Success(new Employee(id, fullName.Trim(), email, role));
+    }
+
+    /// <summary>
+    /// Changes state independently of creation (SAD.md §5.1) — a mechanism,
+    /// not a policy: it does not check that <paramref name="managerId"/>
+    /// belongs to an employee with the Manager role, because validating that
+    /// would require loading a second aggregate by identity (CA-DOM-007). The
+    /// one caller in the MVP (the seeder) already knows it is assigning a
+    /// Manager; a future registration flow that resolves OQ-01 would enforce
+    /// that rule in its own handler, not here.
+    /// </summary>
+    public Result AssignManager(EmployeeId managerId)
+    {
+        if (managerId == Id)
+        {
+            return Result.Failure(EmployeeErrors.CannotBeOwnManager);
+        }
+
+        ManagerId = managerId;
+        return Result.Success();
     }
 }

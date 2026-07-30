@@ -72,4 +72,13 @@ public static class EmployeeErrors
     public static readonly Error NotAuthenticated = new(
         "VF-AUT-004",
         "You must be signed in to perform this action.");
+
+    /// <remarks>
+    /// Not in the FRD §7 catalogue — no user-facing flow in the MVP lets
+    /// anyone assign their own manager; the only caller is the seeder
+    /// (TE-003), for whom this is a programming error, not a business case.
+    /// </remarks>
+    public static readonly Error CannotBeOwnManager = new(
+        "VF-INT-002",
+        "An employee cannot be their own manager.");
 }

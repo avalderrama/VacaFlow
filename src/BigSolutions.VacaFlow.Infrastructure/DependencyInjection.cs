@@ -44,11 +44,11 @@ public static class DependencyInjection
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
+        services.AddScoped<DatabaseSeeder>();
 
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IIdGenerator, GuidIdGenerator>();
 
-        // The seeder joins this list with TE-003; not needed by US-007.
         return services;
     }
 }
