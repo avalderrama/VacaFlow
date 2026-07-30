@@ -1,5 +1,6 @@
 using BigSolutions.VacaFlow.Api.Endpoints;
 using BigSolutions.VacaFlow.Api.ErrorHandling;
+using BigSolutions.VacaFlow.Api.Security;
 using BigSolutions.VacaFlow.Application;
 using BigSolutions.VacaFlow.Application.Abstractions;
 using BigSolutions.VacaFlow.Domain.Employees.Errors;
@@ -25,7 +26,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 // ICurrentUser is implemented in this project, not in Infrastructure: it reads
 // claims from HttpContext, and keeping it here stops the web framework leaking
 // inward (SAD §6.3).
-// builder.Services.AddScoped<ICurrentUser, CurrentUserAccessor>();   // WP 4.4
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUserAccessor>();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

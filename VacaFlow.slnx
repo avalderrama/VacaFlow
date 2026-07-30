@@ -6,6 +6,7 @@
     <Project Path="src/BigSolutions.VacaFlow.Infrastructure/BigSolutions.VacaFlow.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BigSolutions.VacaFlow.Api.FunctionalTests/BigSolutions.VacaFlow.Api.FunctionalTests.csproj" />
     <Project Path="tests/BigSolutions.VacaFlow.Application.UnitTests/BigSolutions.VacaFlow.Application.UnitTests.csproj" />
     <Project Path="tests/BigSolutions.VacaFlow.ArchitectureTests/BigSolutions.VacaFlow.ArchitectureTests.csproj" />
     <Project Path="tests/BigSolutions.VacaFlow.Domain.UnitTests/BigSolutions.VacaFlow.Domain.UnitTests.csproj" />

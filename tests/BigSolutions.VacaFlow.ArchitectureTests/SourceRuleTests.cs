@@ -118,6 +118,50 @@ public sealed class SourceRuleTests
             + "FallbackPolicy.\n" + string.Join("\n", offenders));
     }
 
+    [Fact] // FR-AUT-010, NFR-SEC-003, TE-011 — "No command record carries an
+           // identity field" (SAD §16). Scoped to *Contract.cs/*Command.cs/
+           // *Query.cs/*Request.cs by name, not to whole directories: a
+           // handler legitimately constructs an EmployeeId from IIdGenerator,
+           // and that must not trip this guard. *Response.cs is excluded on
+           // purpose — a response DTO may legitimately echo an id.
+    public void No_Contract_Or_Command_Should_Carry_An_Identity_Field()
+    {
+        string[] forbidden = ["EmployeeId", "ManagerId", "ResponsibleManagerId"];
+        string[] patterns = ["*Contract.cs", "*Command.cs", "*Query.cs", "*Request.cs"];
+
+        // The whole Api project, not just Contracts/: an endpoint-local
+        // record declared in Endpoints/ (exactly what *Request.cs tends to
+        // be) is still a request payload, and scoping this to one subfolder
+        // would repeat the blind spot the endpoint-authorization test above
+        // already refuses to have.
+        var apiDirectory = Path.Combine(SolutionRoot, "src", "BigSolutions.VacaFlow.Api");
+        var applicationDirectory = Path.Combine(SolutionRoot, "src", "BigSolutions.VacaFlow.Application");
+
+        Assert.True(Directory.Exists(apiDirectory), $"Expected project directory not found: {apiDirectory}");
+        Assert.True(Directory.Exists(applicationDirectory), $"Expected directory not found: {applicationDirectory}");
+
+        var apiFiles = patterns
+            .SelectMany(pattern => Directory.EnumerateFiles(apiDirectory, pattern, SearchOption.AllDirectories))
+            .ToList();
+        var applicationFiles = patterns
+            .SelectMany(pattern => Directory.EnumerateFiles(applicationDirectory, pattern, SearchOption.AllDirectories))
+            .ToList();
+
+        // A weak "at least one file somewhere" canary would stay green even
+        // if the whole Contracts convention disappeared while commands
+        // remained — checking each side separately is what actually detects
+        // that the naming convention moved.
+        Assert.True(apiFiles.Count > 0, $"No matching file found under {apiDirectory}.");
+        Assert.True(applicationFiles.Count > 0, $"No matching file found under {applicationDirectory}.");
+
+        var offenders = ScanFiles(forbidden, apiFiles.Concat(applicationFiles));
+
+        Assert.True(
+            offenders.Count == 0,
+            "No API contract or Application command/query may carry an identity field. The acting user comes "
+            + "from ICurrentUser, never from a payload (FR-AUT-010).\n" + string.Join("\n", offenders));
+    }
+
     [Fact] // Keeps ErrorStatusMap from drifting silently behind the FRD §7 catalogue
     public void Every_Domain_Error_Code_Should_Have_A_Status_Mapping()
     {
@@ -154,35 +198,52 @@ public sealed class SourceRuleTests
 
     private static List<string> Scan(string[] forbidden, params string[] directories)
     {
+        var files = directories
+            .Where(Directory.Exists)
+            .SelectMany(directory => Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                        && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+
+        return ScanFiles(forbidden, files);
+    }
+
+    private static List<string> ScanFiles(string[] forbidden, IEnumerable<string> files)
+    {
         var offenders = new List<string>();
 
-        foreach (var directory in directories.Where(Directory.Exists))
+        foreach (var file in files.Where(path =>
+            !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+            && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
         {
-            var files = Directory
-                .EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
-                .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                            && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+            var lines = File.ReadAllLines(file);
 
-            foreach (var file in files)
+            for (var index = 0; index < lines.Length; index++)
             {
-                var lines = File.ReadAllLines(file);
+                var line = lines[index];
+                var trimmed = line.TrimStart();
 
-                for (var index = 0; index < lines.Length; index++)
+                if (trimmed.StartsWith("//", StringComparison.Ordinal)
+                    || trimmed.StartsWith('*'))
                 {
-                    var line = lines[index];
-                    var trimmed = line.TrimStart();
+                    continue;
+                }
 
-                    if (trimmed.StartsWith("//", StringComparison.Ordinal)
-                        || trimmed.StartsWith('*'))
-                    {
-                        continue;
-                    }
+                var matched = forbidden
+                    .Where(candidate => line.Contains(candidate, StringComparison.Ordinal))
+                    .ToList();
 
-                    foreach (var token in forbidden.Where(token => line.Contains(token, StringComparison.Ordinal)))
-                    {
-                        offenders.Add(
-                            $"  {Path.GetRelativePath(SolutionRoot, file)}:{index + 1} — {token.TrimEnd('(', '<')}");
-                    }
+                // Drop a match only when a longer *matched* token already
+                // contains it — "ResponsibleManagerId" subsumes "ManagerId"
+                // on the same line, so that pair collapses to one finding.
+                // Two unrelated tokens matching the same line (e.g. this
+                // class's own DateTime.UtcNow + Guid.NewGuid( rule) must both
+                // still be reported.
+                foreach (var token in matched.Where(candidate => !matched.Any(other =>
+                    other.Length > candidate.Length
+                    && other.Contains(candidate, StringComparison.Ordinal))))
+                {
+                    offenders.Add(
+                        $"  {Path.GetRelativePath(SolutionRoot, file)}:{index + 1} — {token.TrimEnd('(', '<')}");
                 }
             }
         }
