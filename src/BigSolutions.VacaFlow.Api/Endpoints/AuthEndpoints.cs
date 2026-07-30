@@ -67,6 +67,20 @@ internal static class AuthEndpoints
             return Results.NoContent();
         })
         .RequireAuthorization();
+
+        // Returns the caller's own identifier, name, email and role
+        // (FR-AUT-009). It comes entirely from ICurrentUser inside the
+        // handler — no route or query parameter carries it (FR-AUT-010).
+        // Same reason as /logout for stating .RequireAuthorization()
+        // explicitly even though the FallbackPolicy already covers it.
+        group.MapGet("/me", async (
+            GetCurrentUserHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(cancellationToken);
+            return result.ToOkResult(ToResponse);
+        })
+        .RequireAuthorization();
     }
 
     private static Task SignInAsync(HttpContext httpContext, AuthenticatedUserDto user) =>

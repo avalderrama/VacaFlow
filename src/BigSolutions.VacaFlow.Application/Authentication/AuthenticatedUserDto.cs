@@ -2,9 +2,9 @@ namespace BigSolutions.VacaFlow.Application.Authentication;
 
 /// <summary>
 /// Who the caller is, as the authentication use cases report it (CA-APP-006).
-/// Shared by registration and sign-in — and by GET /auth/me when US-010 lands —
-/// because all three answer the same question, and three identical records would
-/// be duplication rather than boundary clarity.
+/// Shared by registration, sign-in and GET /auth/me — all three answer the
+/// same question, and three identical records would be duplication rather
+/// than boundary clarity.
 /// </summary>
 /// <remarks>
 /// A domain entity is never returned across the boundary, and there is no field
