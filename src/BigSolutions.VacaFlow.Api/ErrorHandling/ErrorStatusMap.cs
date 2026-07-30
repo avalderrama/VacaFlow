@@ -3,8 +3,11 @@ using Microsoft.AspNetCore.Http;
 namespace BigSolutions.VacaFlow.Api.ErrorHandling;
 
 /// <summary>
-/// Maps an error code from the FRD §7 catalogue to its HTTP status. Grows one
-/// entry per story; today it covers only the codes US-007 can produce.
+/// Maps an error code to its HTTP status. Most entries come from the FRD §7
+/// catalogue and grow one per story; a few (like <c>VF-INT-001</c>) are
+/// internal-only codes that a Domain *Errors.cs file declares but that never
+/// reach a client in practice — they still need an entry so
+/// Every_Domain_Error_Code_Should_Have_A_Status_Mapping stays green.
 /// </summary>
 internal static class ErrorStatusMap
 {
@@ -15,6 +18,9 @@ internal static class ErrorStatusMap
         ["VF-AUT-002"] = StatusCodes.Status401Unauthorized,
         ["VF-AUT-003"] = StatusCodes.Status403Forbidden,
         ["VF-AUT-004"] = StatusCodes.Status401Unauthorized,
+        ["VF-INT-001"] = StatusCodes.Status500InternalServerError,
+        ["VF-INT-002"] = StatusCodes.Status500InternalServerError,
+        ["VF-INT-003"] = StatusCodes.Status500InternalServerError,
     };
 
     public static int StatusFor(string code) =>

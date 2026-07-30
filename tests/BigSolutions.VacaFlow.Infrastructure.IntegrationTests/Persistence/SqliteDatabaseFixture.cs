@@ -29,12 +29,20 @@ public sealed class SqliteDatabaseFixture : IAsyncLifetime
 
     public IServiceProvider Services => _serviceProvider!;
 
+    /// <summary>
+    /// For the rare assertion that has no Application port yet (e.g. the
+    /// AbsenceTypes catalog, ahead of US-014's repository) and would
+    /// otherwise need an internal Infrastructure type. Raw SQL against the
+    /// same file the real DbContext writes to, not a second data path.
+    /// </summary>
+    public string ConnectionString => $"Data Source={_databasePath}";
+
     public async Task InitializeAsync()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:VacaFlow"] = $"Data Source={_databasePath}",
+                ["ConnectionStrings:VacaFlow"] = ConnectionString,
             })
             .Build();
 

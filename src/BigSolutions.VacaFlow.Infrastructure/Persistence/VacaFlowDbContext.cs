@@ -1,3 +1,4 @@
+using BigSolutions.VacaFlow.Domain.AbsenceTypes;
 using BigSolutions.VacaFlow.Domain.Employees;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,8 @@ internal sealed class VacaFlowDbContext(DbContextOptions<VacaFlowDbContext> opti
     public DbSet<Employee> Employees => Set<Employee>();
 
     public DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+
+    public DbSet<AbsenceType> AbsenceTypes => Set<AbsenceType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -50,4 +50,30 @@ public sealed class EmployeeTests
         Assert.True(employee.IsActive);
         Assert.Null(employee.ManagerId);
     }
+
+    [Fact]
+    public void AssignManager_Should_Set_The_ManagerId()
+    {
+        var employee = Employee.Create(
+            new EmployeeId(Guid.NewGuid()), "Ana Torres", SampleEmail, EmployeeRole.Employee).Value;
+        var managerId = new EmployeeId(Guid.NewGuid());
+
+        var result = employee.AssignManager(managerId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(managerId, employee.ManagerId);
+    }
+
+    [Fact]
+    public void AssignManager_Should_Fail_When_Assigning_The_Employee_To_Themselves()
+    {
+        var id = new EmployeeId(Guid.NewGuid());
+        var employee = Employee.Create(id, "Ana Torres", SampleEmail, EmployeeRole.Employee).Value;
+
+        var result = employee.AssignManager(id);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-INT-002", result.Error.Code);
+        Assert.Null(employee.ManagerId);
+    }
 }
