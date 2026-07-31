@@ -196,6 +196,40 @@ public sealed class SourceRuleTests
             + "or it silently falls back to 500.\n" + string.Join("\n", offenders));
     }
 
+    /// <remarks>
+    /// Every_Domain_Error_Code_Should_Have_A_Status_Mapping above only
+    /// proves an entry exists — not that it maps to the right value. No test
+    /// exercises VF-REQ-003 through HTTP (Request has no Submit() yet, and
+    /// this project's WebApplicationFactory-backed database does not
+    /// reliably reflect out-of-band state forcing — see
+    /// RequestEndpointTests's remarks), so a typo here would ship green
+    /// otherwise. This pins the exact status for every code this test knows
+    /// about; it grows as new codes with a settled HTTP mapping arrive.
+    /// </remarks>
+    [Theory]
+    [InlineData("VF-REQ-001", "StatusCodes.Status400BadRequest")]
+    [InlineData("VF-REQ-002", "StatusCodes.Status400BadRequest")]
+    [InlineData("VF-REQ-003", "StatusCodes.Status409Conflict")]
+    [InlineData("VF-REQ-004", "StatusCodes.Status403Forbidden")]
+    [InlineData("VF-REQ-006", "StatusCodes.Status404NotFound")]
+    [InlineData("VF-CAT-001", "StatusCodes.Status400BadRequest")]
+    [InlineData("VF-AUT-004", "StatusCodes.Status401Unauthorized")]
+    public void Known_Error_Codes_Should_Map_To_Their_Documented_Status(string code, string expectedStatus)
+    {
+        var statusMapFile = Path.Combine(
+            SolutionRoot, "src", "BigSolutions.VacaFlow.Api",
+            "ErrorHandling", "ErrorStatusMap.cs");
+
+        Assert.True(File.Exists(statusMapFile), $"Expected file not found: {statusMapFile}");
+
+        var statusMapContent = File.ReadAllText(statusMapFile);
+        var pattern = $@"\[""{Regex.Escape(code)}""\]\s*=\s*{Regex.Escape(expectedStatus)}\s*,";
+
+        Assert.True(
+            Regex.IsMatch(statusMapContent, pattern),
+            $"Expected ErrorStatusMap to map \"{code}\" to {expectedStatus}, but it did not.");
+    }
+
     private static List<string> Scan(string[] forbidden, params string[] directories)
     {
         var files = directories

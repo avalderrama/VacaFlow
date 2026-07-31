@@ -45,4 +45,29 @@ public static class RequestErrors
         "VF-VAL-001",
         "The reason is required (1 to 500 characters).",
         Field: "reason");
+
+    /// <remarks>
+    /// Field-less: it names the whole operation, not one form field. RULE-03
+    /// (US-016) — only a Draft request can be edited.
+    /// </remarks>
+    public static readonly Error OnlyDraftEditable = new(
+        "VF-REQ-003",
+        "Only Draft requests can be edited.");
+
+    /// <remarks>
+    /// Field-less, same reasoning as OnlyDraftEditable. RULE-04 (US-016) —
+    /// the caller must be the request's own owner, compared only against
+    /// ICurrentUser.EmployeeId (FR-AUT-010).
+    /// </remarks>
+    public static readonly Error NotOwner = new(
+        "VF-REQ-004",
+        "You can only act on your own requests.");
+
+    /// <remarks>
+    /// Field-less, same reasoning as OnlyDraftEditable. Raised when
+    /// PUT /requests/{id} names an id with no matching row (US-016).
+    /// </remarks>
+    public static readonly Error NotFound = new(
+        "VF-REQ-006",
+        "The request was not found.");
 }

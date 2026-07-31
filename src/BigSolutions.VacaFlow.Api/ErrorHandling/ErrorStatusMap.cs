@@ -23,6 +23,9 @@ internal static class ErrorStatusMap
         ["VF-INT-003"] = StatusCodes.Status500InternalServerError,
         ["VF-REQ-001"] = StatusCodes.Status400BadRequest,
         ["VF-REQ-002"] = StatusCodes.Status400BadRequest,
+        ["VF-REQ-003"] = StatusCodes.Status409Conflict,
+        ["VF-REQ-004"] = StatusCodes.Status403Forbidden,
+        ["VF-REQ-006"] = StatusCodes.Status404NotFound,
         ["VF-CAT-001"] = StatusCodes.Status400BadRequest,
     };
 
