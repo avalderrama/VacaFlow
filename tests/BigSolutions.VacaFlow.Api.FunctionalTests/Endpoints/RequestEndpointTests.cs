@@ -3,15 +3,18 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using BigSolutions.VacaFlow.Api.Contracts;
 using BigSolutions.VacaFlow.Application.Abstractions;
+using BigSolutions.VacaFlow.Domain.AbsenceTypes;
+using BigSolutions.VacaFlow.Domain.Employees;
 using BigSolutions.VacaFlow.Domain.Requests;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BigSolutions.VacaFlow.Api.FunctionalTests.Endpoints;
 
 /// <summary>
-/// Demonstrates every acceptance criterion of US-015, US-016 and US-017's
-/// GET /api/requests/{id} end-to-end, against the real pipeline: a real
-/// cookie session, the seeded catalog (TE-003), and the real FallbackPolicy.
+/// Demonstrates every acceptance criterion of US-015, US-016, US-017's
+/// GET /api/requests/{id} and US-018's POST /api/requests/{id}/submit
+/// end-to-end, against the real pipeline: a real cookie session, the seeded
+/// catalog (TE-003), and the real FallbackPolicy.
 /// </summary>
 public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFixture<VacaFlowApiFactory>
 {
@@ -33,12 +36,13 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         return (registered!.Id, types!.Single(type => type.Code == "VACATION").Id);
     }
 
-    private async Task<Guid> CreateDraftAsync(Guid absenceTypeId)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+    private Task<Guid> CreateDraftAsync(Guid absenceTypeId) =>
+        CreateDraftAsync(absenceTypeId, DateOnly.FromDateTime(DateTime.UtcNow));
 
+    private async Task<Guid> CreateDraftAsync(Guid absenceTypeId, DateOnly startDate)
+    {
         using var response = await _client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
-            absenceTypeId, today, today.AddDays(2), "Family trip"));
+            absenceTypeId, startDate, startDate.AddDays(2), "Family trip"));
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -461,20 +465,145 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
     }
 
-    // AC2 (RULE-03, "any other state") is deliberately not exercised at the
-    // HTTP level in this class: producing a non-Draft row requires either
-    // (a) forcing the State column directly via SQL against this
-    // WebApplicationFactory's database, which this project's US-015 session
-    // found reproducibly broken (a fresh out-of-band SqliteConnection
-    // against the factory's file sees a zero-byte, table-less database even
-    // moments after the same request round-tripped correctly through the
-    // live host — the same WebApplicationFactory/HostFactoryResolver quirk
-    // flagged during US-014's review), or (b) Submit(), which does not
-    // exist until US-018. The guard itself (RULE-03, first check in
-    // Request.UpdateDetails) IS verified end-to-end instead, at the
-    // Infrastructure level — see RequestRepositoryTests, which forces the
-    // State column through the SqliteDatabaseFixture-backed database (not
-    // this WebApplicationFactory one), where raw SQL is proven reliable
-    // (same pattern AbsenceTypeRepositoryTests already uses for a
-    // deactivated row).
+    /// <summary>
+    /// Submit re-validates RULE-02, so a submit test built on a request
+    /// created for today's own date could flake if the real clock crosses
+    /// midnight UTC between the create call and the submit call — same
+    /// reasoning as Post_With_Valid_Data_Returns_201_With_A_Location_Header.
+    /// today + 1 gives the whole create-then-submit sequence a full day of
+    /// margin.
+    /// </summary>
+    private async Task<Guid> CreateAndSubmitDraftAsync(Guid absenceTypeId)
+    {
+        var id = await CreateDraftAsync(absenceTypeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+        using var submitResponse = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+        submitResponse.EnsureSuccessStatusCode();
+        return id;
+    }
+
+    [Fact]
+    public async Task Submit_Own_Draft_Returns_204_And_Persists_The_Transition()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateDraftAsync(typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Submitted, persisted.State);
+        Assert.NotNull(persisted.SubmittedAtUtc);
+    }
+
+    /// <summary>AC5 end-to-end: once submitted, the draft is immutable to its own owner.</summary>
+    [Fact]
+    public async Task Put_After_Submit_Returns_VF_REQ_003()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateAndSubmitDraftAsync(typeId);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        using var response = await _client.PutAsJsonAsync($"/api/requests/{id}", new UpdateRequestContract(
+            typeId, today, today.AddDays(2), "Updated reason"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-003", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Submit_A_Request_That_Is_Not_A_Draft_Returns_VF_REQ_005_With_The_Interpolated_Message()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateAndSubmitDraftAsync(typeId);
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-005", body.GetProperty("code").GetString());
+        Assert.Equal(
+            "This request cannot move from Submitted to Submitted.",
+            body.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Submit_On_Another_Employees_Draft_Returns_VF_REQ_004()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var victimsDraftId = await CreateDraftAsync(typeId);
+
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.PostAsync($"/api/requests/{victimsDraftId}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-004", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Submit_With_A_Nonexistent_Id_Returns_VF_REQ_006()
+    {
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.PostAsync($"/api/requests/{Guid.NewGuid()}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-006", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Submit_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.PostAsync($"/api/requests/{Guid.NewGuid()}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// Request.Create takes "today" as a caller-supplied parameter (not a
+    /// clock read), so a stale draft can be built legitimately — no SQL,
+    /// no reaching the internal VacaFlowDbContext — and seeded through the
+    /// same DI route LoadRequestAsync already proves reliable in this
+    /// harness: IRequestRepository.Add + IUnitOfWork.SaveChangesAsync from
+    /// the live container, same pattern
+    /// RequestRepositoryTests.UpdateDetails_On_A_Row_Forced_To_Submitted_Should_Fail_With_VF_REQ_003
+    /// uses for its own seed step.
+    /// </summary>
+    private async Task<Guid> SeedStaleDraftAsync(Guid ownerId, Guid absenceTypeId)
+    {
+        var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var period = DateRange.Create(yesterday, yesterday).Value;
+        var stale = Request.Create(
+            new RequestId(Guid.NewGuid()), new EmployeeId(ownerId), new AbsenceTypeId(absenceTypeId),
+            period, "Family trip", yesterday, DateTime.UtcNow).Value;
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<IRequestRepository>().Add(stale);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+
+        return stale.Id.Value;
+    }
+
+    [Fact]
+    public async Task Submit_A_Draft_Whose_Start_Date_Has_Since_Passed_Returns_VF_REQ_002()
+    {
+        var (employeeId, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await SeedStaleDraftAsync(employeeId, typeId);
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-002", body.GetProperty("code").GetString());
+        Assert.Equal("startDate", body.GetProperty("field").GetString());
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Draft, persisted.State);
+    }
 }

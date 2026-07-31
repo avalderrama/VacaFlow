@@ -70,4 +70,14 @@ public static class RequestErrors
     public static readonly Error NotFound = new(
         "VF-REQ-006",
         "The request was not found.");
+
+    /// <remarks>
+    /// Field-less, message parameterized by the attempted transition
+    /// (FR-LFC-001, US-018) — the only member here that is a factory rather
+    /// than a static readonly instance, since its message interpolates the
+    /// two RequestState values involved.
+    /// </remarks>
+    public static Error InvalidTransition(RequestState from, RequestState to) => new(
+        "VF-REQ-005",
+        $"This request cannot move from {from} to {to}.");
 }

@@ -9,8 +9,8 @@ namespace BigSolutions.VacaFlow.Domain.Requests;
 /// An employee's absence request (Intent.md §7.1, FRD.md §4). Aggregate root:
 /// the request's own lifecycle changes independently of the employee or the
 /// absence type it references (SAD.md §5.1). Exercises <see cref="Create"/>
-/// and <see cref="UpdateDetails"/> — Submit/Cancel/Decide arrive with their
-/// own stories (US-018/US-019, US-015 plan D5).
+/// <see cref="UpdateDetails"/> and <see cref="Submit"/> — Cancel/Decide
+/// arrive with their own stories (US-019/US-021, US-015 plan D5).
 /// </summary>
 public sealed class Request : AggregateRoot<RequestId>
 {
@@ -119,6 +119,35 @@ public sealed class Request : AggregateRoot<RequestId>
         AbsenceTypeId = absenceTypeId;
         Period = period;
         Reason = reason.Trim();
+        UpdatedAtUtc = nowUtc;
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Submits an owner's own draft for approval (US-018, transition T1,
+    /// FR-LFC-001—004). The state governs before the date does — an
+    /// already-decided or already-submitted request fails on the transition
+    /// itself, never on a re-check of content. RULE-02 is re-evaluated with
+    /// the same comparison <see cref="Create"/>/<see cref="UpdateDetails"/>
+    /// use (OQ-04), so a stale draft submitted after its start date has
+    /// passed carries the same VF-REQ-002. Ownership (RULE-04) is an
+    /// Application concern, checked by the handler before this is called.
+    /// </summary>
+    public Result Submit(DateOnly today, DateTime nowUtc)
+    {
+        if (State is not RequestState.Draft)
+        {
+            return Result.Failure(RequestErrors.InvalidTransition(State, RequestState.Submitted));
+        }
+
+        if (Period.Start < today)
+        {
+            return Result.Failure(RequestErrors.StartDateInPast);
+        }
+
+        State = RequestState.Submitted;
+        SubmittedAtUtc = nowUtc;
         UpdatedAtUtc = nowUtc;
 
         return Result.Success();
