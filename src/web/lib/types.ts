@@ -29,11 +29,17 @@ export interface RequestDetail {
   state: RequestState;
 }
 
+// The C# contract's fields are all nullable (Guid?/DateOnly?/string?) so the
+// handler's own Validate() reports a proper VF-VAL-001 for a missing field.
+// A blank form control's value is '' — sending that literally would fail
+// ASP.NET Core's JSON model binding for Guid?/DateOnly? before Validate()
+// ever runs, surfacing as a generic 500 instead of the catalogued error.
+// null is the only value that binds correctly to "absent".
 export interface RequestPayload {
-  absenceTypeId: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
+  absenceTypeId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  reason: string | null;
 }
 
 export interface ApiError {

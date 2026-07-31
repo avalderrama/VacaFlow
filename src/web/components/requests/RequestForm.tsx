@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { createRequest, updateRequest, listAbsenceTypes, ApplicationError } from '@/lib/api';
 import { setPendingNotification } from '@/lib/session';
@@ -23,6 +23,16 @@ function todayIso(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// "Today" never changes during a component's lifetime, so there is nothing
+// to subscribe to — this is the stable no-op useSyncExternalStore expects.
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+function emptyServerSnapshot(): string {
+  return '';
 }
 
 // The same field labels §7 of the FRD uses for its error catalogue's
@@ -53,12 +63,14 @@ export function RequestForm(props: RequestFormProps) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Lazy initializer, not an effect (same reasoning as the notification read
-  // in app/(app)/requests/page.tsx): the server render yields '' (no
-  // `window`), and the client's own render pass computes the real date —
-  // no hydration mismatch on the `min` attribute below, no cascading
-  // re-render from an effect.
-  const [today] = useState(() => (typeof window === 'undefined' ? '' : todayIso()));
+  // useSyncExternalStore, not a useState initializer: a `typeof window`
+  // branch in a render-path initializer IS a hydration mismatch (React
+  // commits the server value, then never patches the attribute on later
+  // renders). This is React's own supported way to read a client-only
+  // value — the server snapshot ('') renders first, then React performs a
+  // real post-hydration re-render with the client snapshot, which does
+  // update the `min` attribute below.
+  const today = useSyncExternalStore(subscribeToNothing, todayIso, emptyServerSnapshot);
 
   useEffect(() => {
     listAbsenceTypes()
@@ -74,7 +86,16 @@ export function RequestForm(props: RequestFormProps) {
     setGeneralError(null);
     setSaving(true);
 
-    const payload = { absenceTypeId, startDate, endDate, reason };
+    // '' → null: the C# contract's fields are Guid?/DateOnly?/string?, and
+    // ASP.NET Core's JSON binder rejects an empty string for a nullable
+    // Guid/DateOnly before Validate() ever runs — that reached the server as
+    // an unhandled exception (500), not the catalogued VF-VAL-001.
+    const payload = {
+      absenceTypeId: absenceTypeId || null,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      reason: reason || null,
+    };
 
     try {
       if (props.mode === 'create') {
