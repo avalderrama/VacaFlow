@@ -21,6 +21,9 @@ internal static class ErrorStatusMap
         ["VF-INT-001"] = StatusCodes.Status500InternalServerError,
         ["VF-INT-002"] = StatusCodes.Status500InternalServerError,
         ["VF-INT-003"] = StatusCodes.Status500InternalServerError,
+        ["VF-REQ-001"] = StatusCodes.Status400BadRequest,
+        ["VF-REQ-002"] = StatusCodes.Status400BadRequest,
+        ["VF-CAT-001"] = StatusCodes.Status400BadRequest,
     };
 
     public static int StatusFor(string code) =>
