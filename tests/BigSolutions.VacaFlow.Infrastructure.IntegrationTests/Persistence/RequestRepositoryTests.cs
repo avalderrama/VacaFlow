@@ -38,6 +38,15 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         return types.Single(type => type.Code.Value == "VACATION").Id;
     }
 
+    private async Task<AbsenceTypeId> GetSeededPersonalLeaveTypeIdAsync()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var types = await scope.ServiceProvider.GetRequiredService<IAbsenceTypeRepository>()
+            .ListActiveAsync(CancellationToken.None);
+
+        return types.Single(type => type.Code.Value == "PERSONAL_LEAVE").Id;
+    }
+
     [Fact]
     public async Task Add_Followed_By_SaveChanges_Should_Persist_The_Request()
     {
@@ -84,6 +93,95 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         Assert.False(reader.IsDBNull(7));
         Assert.True(reader.IsDBNull(8));
         Assert.True(reader.IsDBNull(9));
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_Should_Return_The_Full_Aggregate_For_A_Seeded_Request()
+    {
+        var owner = await SeedEmployeeAsync(fixture.Services, $"getbyid-{Guid.NewGuid():N}@vacaflow.test");
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var period = DateRange.Create(Today, Today.AddDays(2)).Value;
+        var nowUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+        var request = Request.Create(
+            new RequestId(Guid.NewGuid()), owner.Id, typeId, period, "Family trip", Today, nowUtc).Value;
+
+        await using (var writeScope = fixture.Services.CreateAsyncScope())
+        {
+            writeScope.ServiceProvider.GetRequiredService<IRequestRepository>().Add(request);
+            await writeScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var found = await readScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(owner.Id, found.OwnerId);
+        Assert.Equal(typeId, found.AbsenceTypeId);
+        Assert.Equal(period, found.Period);
+        Assert.Equal("Family trip", found.Reason);
+        Assert.Equal(RequestState.Draft, found.State);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_Should_Return_Null_For_A_Random_Id()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var found = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(new RequestId(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task Loading_Then_UpdateDetails_Then_SaveChanges_Should_Persist_The_Edit_Without_An_Explicit_Update_Call()
+    {
+        var owner = await SeedEmployeeAsync(fixture.Services, $"edit-{Guid.NewGuid():N}@vacaflow.test");
+        var originalTypeId = await GetSeededVacationTypeIdAsync();
+        var originalPeriod = DateRange.Create(Today, Today.AddDays(2)).Value;
+        var createdAtUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+        var request = Request.Create(
+            new RequestId(Guid.NewGuid()), owner.Id, originalTypeId, originalPeriod, "Family trip",
+            Today, createdAtUtc).Value;
+
+        await using (var seedScope = fixture.Services.CreateAsyncScope())
+        {
+            seedScope.ServiceProvider.GetRequiredService<IRequestRepository>().Add(request);
+            await seedScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        var otherTypeId = await GetSeededPersonalLeaveTypeIdAsync();
+        var newPeriod = DateRange.Create(Today.AddDays(1), Today.AddDays(3)).Value;
+        var updatedAtUtc = createdAtUtc.AddHours(3);
+
+        await using (var editScope = fixture.Services.CreateAsyncScope())
+        {
+            var repository = editScope.ServiceProvider.GetRequiredService<IRequestRepository>();
+            var loaded = await repository.GetByIdAsync(request.Id, CancellationToken.None);
+            Assert.NotNull(loaded);
+
+            var updateResult = loaded.UpdateDetails(otherTypeId, newPeriod, "Updated reason", Today, updatedAtUtc);
+            Assert.True(updateResult.IsSuccess);
+
+            // No explicit repository.Update()/Add() call — EF's own change
+            // tracking on the loaded, still-tracked entity is what this test
+            // verifies (plan §3, item #7's remark).
+            var saveResult = await editScope.ServiceProvider.GetRequiredService<IUnitOfWork>()
+                .SaveChangesAsync(CancellationToken.None);
+            Assert.True(saveResult.IsSuccess);
+        }
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var reread = await readScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+
+        Assert.NotNull(reread);
+        Assert.Equal(otherTypeId, reread.AbsenceTypeId);
+        Assert.Equal(newPeriod, reread.Period);
+        Assert.Equal("Updated reason", reread.Reason);
+        Assert.Equal(updatedAtUtc, reread.UpdatedAtUtc);
+        Assert.Equal(createdAtUtc, reread.CreatedAtUtc);
+        Assert.Equal(RequestState.Draft, reread.State);
     }
 
     /// <remarks>
@@ -172,5 +270,51 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         command.CommandText = "UPDATE AbsenceTypes SET IsActive = $isActive WHERE Code = 'VACATION'";
         command.Parameters.AddWithValue("$isActive", isActive);
         await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// RULE-03 (US-016): only a Draft request can be edited. Request exposes
+    /// no Submit() yet (arrives with US-018), so the only way to produce a
+    /// non-Draft row is to write the State column directly — same pattern as
+    /// ExistsActiveAsync_Should_Return_False_For_A_Deactivated_Type above.
+    /// This is the authoritative end-to-end proof of the guard for this
+    /// story (US-016 plan D7); the equivalent scenario is not exercised at
+    /// the Api.FunctionalTests HTTP level because that project's
+    /// WebApplicationFactory-backed database does not reliably reflect
+    /// out-of-band SQL writes/reads (see RequestEndpointTests's remarks).
+    /// </summary>
+    [Fact]
+    public async Task UpdateDetails_On_A_Row_Forced_To_Submitted_Should_Fail_With_VF_REQ_003()
+    {
+        var owner = await SeedEmployeeAsync(fixture.Services, $"submitted-{Guid.NewGuid():N}@vacaflow.test");
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var period = DateRange.Create(Today, Today.AddDays(2)).Value;
+        var request = Request.Create(
+            new RequestId(Guid.NewGuid()), owner.Id, typeId, period, "Family trip",
+            Today, DateTime.UtcNow).Value;
+
+        await using (var seedScope = fixture.Services.CreateAsyncScope())
+        {
+            seedScope.ServiceProvider.GetRequiredService<IRequestRepository>().Add(request);
+            await seedScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var connection = new SqliteConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Requests SET State = 1 WHERE Id = $id";
+        command.Parameters.AddWithValue("$id", request.Id.Value.ToString().ToUpperInvariant());
+        await command.ExecuteNonQueryAsync();
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var loaded = await readScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(RequestState.Submitted, loaded.State);
+
+        var result = loaded.UpdateDetails(typeId, period, "Attempted edit", Today, DateTime.UtcNow);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-003", result.Error.Code);
     }
 }

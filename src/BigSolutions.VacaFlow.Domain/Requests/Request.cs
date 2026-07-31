@@ -8,9 +8,9 @@ namespace BigSolutions.VacaFlow.Domain.Requests;
 /// <summary>
 /// An employee's absence request (Intent.md §7.1, FRD.md §4). Aggregate root:
 /// the request's own lifecycle changes independently of the employee or the
-/// absence type it references (SAD.md §5.1). This story only exercises
-/// <see cref="Create"/> — Submit/Cancel/Decide arrive with their own stories
-/// (US-016/US-018/US-019, US-015 plan D5).
+/// absence type it references (SAD.md §5.1). Exercises <see cref="Create"/>
+/// and <see cref="UpdateDetails"/> — Submit/Cancel/Decide arrive with their
+/// own stories (US-018/US-019, US-015 plan D5).
 /// </summary>
 public sealed class Request : AggregateRoot<RequestId>
 {
@@ -51,6 +51,9 @@ public sealed class Request : AggregateRoot<RequestId>
 
     public RequestState State { get; private set; }
 
+    /// <summary>RULE-03 (US-016): only a Draft request can be edited.</summary>
+    public bool IsEditable => State is RequestState.Draft;
+
     public DateTime CreatedAtUtc { get; private set; }
 
     public DateTime UpdatedAtUtc { get; private set; }
@@ -79,5 +82,45 @@ public sealed class Request : AggregateRoot<RequestId>
         }
 
         return Result.Success(new Request(id, ownerId, absenceTypeId, period, reason.Trim(), nowUtc));
+    }
+
+    /// <summary>
+    /// Edits an owner's own draft (US-016, FR-REQ-005—007). RULE-03 is
+    /// checked first — the state governs before the content does. RULE-01 is
+    /// already unbreakable by construction of <paramref name="period"/>;
+    /// RULE-02 and the reason backstop are re-evaluated with the exact
+    /// checks <see cref="Create"/> uses, so edit failures carry the same
+    /// field messages as creation (AC4). Ownership (RULE-04) is an
+    /// Application concern — the handler compares against
+    /// ICurrentUser.EmployeeId before calling this.
+    /// </summary>
+    public Result UpdateDetails(
+        AbsenceTypeId absenceTypeId,
+        DateRange period,
+        string? reason,
+        DateOnly today,
+        DateTime nowUtc)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(RequestErrors.OnlyDraftEditable);
+        }
+
+        if (period.Start < today)
+        {
+            return Result.Failure(RequestErrors.StartDateInPast);
+        }
+
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > MaxReasonLength)
+        {
+            return Result.Failure(RequestErrors.ReasonRequired);
+        }
+
+        AbsenceTypeId = absenceTypeId;
+        Period = period;
+        Reason = reason.Trim();
+        UpdatedAtUtc = nowUtc;
+
+        return Result.Success();
     }
 }

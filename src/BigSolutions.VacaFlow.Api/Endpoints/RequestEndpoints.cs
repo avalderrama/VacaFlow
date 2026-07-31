@@ -28,5 +28,24 @@ internal static class RequestEndpoints
             return result.ToCreatedResult(id => $"/api/requests/{id}", id => new { id });
         })
         .RequireAuthorization();
+
+        // Update returns 204 — never the mutated request body (ADR-012).
+        group.MapPut("/{id:guid}", async (
+            Guid id,
+            UpdateRequestContract contract,
+            UpdateRequestHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new UpdateRequestCommand(
+                id,
+                contract.AbsenceTypeId,
+                contract.StartDate,
+                contract.EndDate,
+                contract.Reason);
+
+            var result = await handler.Handle(command, cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization();
     }
 }
