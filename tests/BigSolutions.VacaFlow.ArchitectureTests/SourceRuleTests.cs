@@ -198,19 +198,17 @@ public sealed class SourceRuleTests
 
     /// <remarks>
     /// Every_Domain_Error_Code_Should_Have_A_Status_Mapping above only
-    /// proves an entry exists — not that it maps to the right value. No test
-    /// exercises VF-REQ-003 through HTTP (Request has no Submit() yet, and
-    /// this project's WebApplicationFactory-backed database does not
-    /// reliably reflect out-of-band state forcing — see
-    /// RequestEndpointTests's remarks), so a typo here would ship green
-    /// otherwise. This pins the exact status for every code this test knows
-    /// about; it grows as new codes with a settled HTTP mapping arrive.
+    /// proves an entry exists — not that it maps to the right value, and a
+    /// typo here would ship green otherwise. This pins the exact status for
+    /// every code this test knows about; it grows as new codes with a
+    /// settled HTTP mapping arrive.
     /// </remarks>
     [Theory]
     [InlineData("VF-REQ-001", "StatusCodes.Status400BadRequest")]
     [InlineData("VF-REQ-002", "StatusCodes.Status400BadRequest")]
     [InlineData("VF-REQ-003", "StatusCodes.Status409Conflict")]
     [InlineData("VF-REQ-004", "StatusCodes.Status403Forbidden")]
+    [InlineData("VF-REQ-005", "StatusCodes.Status409Conflict")]
     [InlineData("VF-REQ-006", "StatusCodes.Status404NotFound")]
     [InlineData("VF-CAT-001", "StatusCodes.Status400BadRequest")]
     [InlineData("VF-AUT-004", "StatusCodes.Status401Unauthorized")]

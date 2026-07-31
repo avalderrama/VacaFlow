@@ -59,6 +59,18 @@ internal static class RequestEndpoints
             return result.ToOkResult(ToDetailResponse);
         })
         .RequireAuthorization();
+
+        // Empty body (FRD.md §6.3) — no contract to bind. 204 on success,
+        // never the updated request (ADR-012, same delta as Create/Update).
+        group.MapPost("/{id:guid}/submit", async (
+            Guid id,
+            SubmitRequestHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(id, cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization();
     }
 
     private static RequestDetailResponse ToDetailResponse(RequestDetailDto dto) =>

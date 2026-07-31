@@ -95,19 +95,6 @@ public sealed class RequestTests
     private static Request NewDraft() =>
         Request.Create(Id, OwnerId, TypeId, PeriodStartingToday(), "Family trip", Today, NowUtc).Value;
 
-    /// <remarks>
-    /// RULE-03's "any other state" branch (UpdateDetails on a non-Draft
-    /// request → VF-REQ-003) is not exercised in this class: Draft is the
-    /// only state reachable through the aggregate's own public API today —
-    /// Submit arrives with US-018 (US-016 plan D7). It IS covered
-    /// end-to-end by Infrastructure.IntegrationTests's
-    /// RequestRepositoryTests.UpdateDetails_On_A_Row_Forced_To_Submitted_Should_Fail_With_VF_REQ_003,
-    /// which forces a Submitted row directly in the SqliteDatabaseFixture
-    /// database (not the Api.FunctionalTests WebApplicationFactory one,
-    /// where out-of-band SQL proved unreliable). When US-018 delivers
-    /// Submit, this class gains a sibling that chains Submit + UpdateDetails
-    /// to cover the guard from a pure domain unit test too.
-    /// </remarks>
     [Fact]
     public void UpdateDetails_Should_Succeed_On_A_Draft_With_Valid_Data()
     {
@@ -187,5 +174,85 @@ public sealed class RequestTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(maxLength, request.Reason);
+    }
+
+    [Fact]
+    public void Submit_Should_Succeed_On_A_Draft_With_A_Future_Start_Date()
+    {
+        var futurePeriod = DateRange.Create(Today.AddDays(5), Today.AddDays(7)).Value;
+        var request = Request.Create(Id, OwnerId, TypeId, futurePeriod, "Family trip", Today, NowUtc).Value;
+
+        var result = request.Submit(Today, LaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Submitted, request.State);
+        Assert.Equal(LaterNowUtc, request.SubmittedAtUtc);
+        Assert.Equal(LaterNowUtc, request.UpdatedAtUtc);
+        Assert.Equal(NowUtc, request.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void Submit_Should_Succeed_When_The_Start_Date_Equals_Today()
+    {
+        var request = NewDraft();
+
+        var result = request.Submit(Today, LaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public void Submit_Should_Fail_When_The_Start_Date_Has_Since_Passed()
+    {
+        var request = NewDraft();
+        var tomorrow = Today.AddDays(1);
+
+        var result = request.Submit(tomorrow, LaterNowUtc);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-002", result.Error.Code);
+        Assert.Equal("startDate", result.Error.Field);
+        Assert.Equal(RequestState.Draft, request.State);
+        Assert.Null(request.SubmittedAtUtc);
+    }
+
+    [Fact]
+    public void Submit_Should_Fail_When_The_Request_Is_Already_Submitted()
+    {
+        var request = NewDraft();
+        request.Submit(Today, LaterNowUtc);
+
+        var submittedAt = request.SubmittedAtUtc;
+        var updatedAt = request.UpdatedAtUtc;
+
+        var result = request.Submit(Today, LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-005", result.Error.Code);
+        Assert.Equal("This request cannot move from Submitted to Submitted.", result.Error.Message);
+        Assert.Equal(submittedAt, request.SubmittedAtUtc);
+        Assert.Equal(updatedAt, request.UpdatedAtUtc);
+    }
+
+    /// <remarks>
+    /// Settles US-016 plan D7: RULE-03's "any other state" branch was
+    /// unreachable through the aggregate's own public API until Submit
+    /// existed. Now it is reached the legitimate way — Create, then Submit,
+    /// then attempt UpdateDetails — instead of only via the direct-SQL state
+    /// forcing RequestRepositoryTests uses at the integration level (AC5).
+    /// </remarks>
+    [Fact]
+    public void UpdateDetails_Should_Fail_When_The_Request_Is_Already_Submitted()
+    {
+        var request = NewDraft();
+        request.Submit(Today, LaterNowUtc);
+        var newPeriod = DateRange.Create(Today.AddDays(1), Today.AddDays(3)).Value;
+
+        var result = request.UpdateDetails(OtherTypeId, newPeriod, "Updated reason", Today, LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-003", result.Error.Code);
+        Assert.Equal(TypeId, request.AbsenceTypeId);
+        Assert.Equal(RequestState.Submitted, request.State);
     }
 }

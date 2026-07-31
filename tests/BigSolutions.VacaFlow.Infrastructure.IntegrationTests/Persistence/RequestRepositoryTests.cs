@@ -273,15 +273,14 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
     }
 
     /// <summary>
-    /// RULE-03 (US-016): only a Draft request can be edited. Request exposes
-    /// no Submit() yet (arrives with US-018), so the only way to produce a
-    /// non-Draft row is to write the State column directly — same pattern as
-    /// ExistsActiveAsync_Should_Return_False_For_A_Deactivated_Type above.
-    /// This is the authoritative end-to-end proof of the guard for this
-    /// story (US-016 plan D7); the equivalent scenario is not exercised at
-    /// the Api.FunctionalTests HTTP level because that project's
-    /// WebApplicationFactory-backed database does not reliably reflect
-    /// out-of-band SQL writes/reads (see RequestEndpointTests's remarks).
+    /// RULE-03 (US-016): only a Draft request can be edited. Forces the
+    /// State column directly rather than going through Submit() — same
+    /// pattern as ExistsActiveAsync_Should_Return_False_For_A_Deactivated_Type
+    /// above — so this proves the guard at the persisted-row level
+    /// independently of the aggregate's own transition logic (US-016 plan
+    /// D7). The equivalent scenario is also proven at the HTTP level, via a
+    /// real Submit(), by RequestEndpointTests.Put_After_Submit_Returns_VF_REQ_003
+    /// (US-018).
     /// </summary>
     [Fact]
     public async Task UpdateDetails_On_A_Row_Forced_To_Submitted_Should_Fail_With_VF_REQ_003()
