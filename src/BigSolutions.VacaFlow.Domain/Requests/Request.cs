@@ -9,8 +9,8 @@ namespace BigSolutions.VacaFlow.Domain.Requests;
 /// An employee's absence request (Intent.md §7.1, FRD.md §4). Aggregate root:
 /// the request's own lifecycle changes independently of the employee or the
 /// absence type it references (SAD.md §5.1). Exercises <see cref="Create"/>
-/// <see cref="UpdateDetails"/> and <see cref="Submit"/> — Cancel/Decide
-/// arrive with their own stories (US-019/US-021, US-015 plan D5).
+/// <see cref="UpdateDetails"/>, <see cref="Submit"/> and <see cref="Cancel"/>
+/// — Decide arrives with its own story (US-021, US-015 plan D5).
 /// </summary>
 public sealed class Request : AggregateRoot<RequestId>
 {
@@ -148,6 +148,31 @@ public sealed class Request : AggregateRoot<RequestId>
 
         State = RequestState.Submitted;
         SubmittedAtUtc = nowUtc;
+        UpdatedAtUtc = nowUtc;
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Cancels an owner's own request (US-019, transitions T2/T5,
+    /// FR-LFC-005). Draft and Submitted are the only cancellable states —
+    /// exactly the complement of "final" (Approved/Rejected/Cancelled,
+    /// FRD.md §4.1) — so any other state fails on the transition itself,
+    /// with no re-check of dates or content (cancelling something whose
+    /// start date has already passed is the ordinary case, not an error).
+    /// SubmittedAtUtc is left untouched if already set — it is a historical
+    /// fact, not a status flag. Ownership (RULE-04) is an Application
+    /// concern, checked by the handler before this is called.
+    /// </summary>
+    public Result Cancel(DateTime nowUtc)
+    {
+        if (State is not (RequestState.Draft or RequestState.Submitted))
+        {
+            return Result.Failure(RequestErrors.InvalidTransition(State, RequestState.Cancelled));
+        }
+
+        State = RequestState.Cancelled;
+        ClosedAtUtc = nowUtc;
         UpdatedAtUtc = nowUtc;
 
         return Result.Success();

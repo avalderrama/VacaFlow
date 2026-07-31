@@ -71,6 +71,17 @@ internal static class RequestEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization();
+
+        // Empty body (FRD.md §6.3) — no contract to bind, same shape as submit.
+        group.MapPost("/{id:guid}/cancel", async (
+            Guid id,
+            CancelRequestHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(id, cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization();
     }
 
     private static RequestDetailResponse ToDetailResponse(RequestDetailDto dto) =>
