@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddDbContext<VacaFlowDbContext>(options => options.UseSqlite(connectionString));
 
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<IAbsenceTypeRepository, AbsenceTypeRepository>();
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
