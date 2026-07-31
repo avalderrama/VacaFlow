@@ -15,4 +15,7 @@ public interface IEmployeeRepository
     Task<Employee?> GetByIdAsync(EmployeeId id, CancellationToken cancellationToken);
 
     void Add(Employee employee);
+
+    /// <summary>Batch resolution by id, for enriching a list without N+1 (US-020).</summary>
+    Task<IReadOnlyList<Employee>> ListByIdsAsync(IReadOnlyCollection<EmployeeId> ids, CancellationToken cancellationToken);
 }

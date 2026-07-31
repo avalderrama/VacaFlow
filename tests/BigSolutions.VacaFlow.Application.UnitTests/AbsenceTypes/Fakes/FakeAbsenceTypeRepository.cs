@@ -11,4 +11,7 @@ internal sealed class FakeAbsenceTypeRepository(params AbsenceType[] types) : IA
 
     public Task<bool> ExistsActiveAsync(AbsenceTypeId id, CancellationToken cancellationToken) =>
         Task.FromResult(types.Any(type => type.Id == id && type.IsActive));
+
+    public Task<IReadOnlyList<AbsenceType>> ListByIdsAsync(IReadOnlyCollection<AbsenceTypeId> ids, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AbsenceType>>(types.Where(type => ids.Contains(type.Id)).ToList());
 }

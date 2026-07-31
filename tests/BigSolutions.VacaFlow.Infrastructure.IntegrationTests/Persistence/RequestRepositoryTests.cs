@@ -316,4 +316,131 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         Assert.True(result.IsFailure);
         Assert.Equal("VF-REQ-003", result.Error.Code);
     }
+
+    private static async Task<Employee> SeedEmployeeAsync(IServiceProvider services, string email, EmployeeId? managerId)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var employee = Employee.Create(
+            new EmployeeId(Guid.NewGuid()), "Integration Test Employee", Email.Create(email).Value, EmployeeRole.Employee).Value;
+
+        if (managerId is not null)
+        {
+            employee.AssignManager(managerId.Value);
+        }
+
+        scope.ServiceProvider.GetRequiredService<IEmployeeRepository>().Add(employee);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+
+        return employee;
+    }
+
+    private async Task<Request> SeedRequestAsync(EmployeeId owner, AbsenceTypeId typeId, DateTime createdAtUtc)
+    {
+        var period = DateRange.Create(Today, Today.AddDays(2)).Value;
+        var request = Request.Create(
+            new RequestId(Guid.NewGuid()), owner, typeId, period, "Family trip", Today, createdAtUtc).Value;
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<IRequestRepository>().Add(request);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+
+        return request;
+    }
+
+    [Fact]
+    public async Task ListOwnedByAsync_Returns_Only_The_Owners_Requests_In_Every_State_Most_Recent_First()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var owner = await SeedEmployeeAsync(fixture.Services, $"owned-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var other = await SeedEmployeeAsync(fixture.Services, $"owned-other-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var now = DateTime.UtcNow;
+        var older = await SeedRequestAsync(owner.Id, typeId, now.AddMinutes(-10));
+        var newer = await SeedRequestAsync(owner.Id, typeId, now);
+        await SeedRequestAsync(other.Id, typeId, now);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .ListOwnedByAsync(owner.Id, CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(newer.Id, result[0].Id);
+        Assert.Equal(older.Id, result[1].Id);
+    }
+
+    [Fact]
+    public async Task ListPendingForManagerAsync_Returns_Only_Submitted_Requests_Of_Assigned_Employees()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"manager-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var assigned = await SeedEmployeeAsync(fixture.Services, $"assigned-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var unassigned = await SeedEmployeeAsync(fixture.Services, $"unassigned-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var otherManagersEmployee = await SeedEmployeeAsync(fixture.Services, $"other-mgr-{Guid.NewGuid():N}@vacaflow.test", unassigned.Id);
+
+        var pending = await SeedRequestAsync(assigned.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(pending.Id);
+
+        var draft = await SeedRequestAsync(assigned.Id, typeId, DateTime.UtcNow.AddMinutes(-1));
+
+        var cancelled = await SeedRequestAsync(assigned.Id, typeId, DateTime.UtcNow.AddMinutes(-2));
+        await SubmitAsync(cancelled.Id);
+        await CancelAsync(cancelled.Id);
+
+        var unassignedSubmitted = await SeedRequestAsync(unassigned.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(unassignedSubmitted.Id);
+
+        var otherManagerSubmitted = await SeedRequestAsync(otherManagersEmployee.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(otherManagerSubmitted.Id);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .ListPendingForManagerAsync(manager.Id, CancellationToken.None);
+
+        var resultId = Assert.Single(result);
+        Assert.Equal(pending.Id, resultId.Id);
+        Assert.DoesNotContain(result, request => request.Id == draft.Id);
+        Assert.DoesNotContain(result, request => request.Id == cancelled.Id);
+        Assert.DoesNotContain(result, request => request.Id == unassignedSubmitted.Id);
+        Assert.DoesNotContain(result, request => request.Id == otherManagerSubmitted.Id);
+    }
+
+    [Fact]
+    public async Task ListPendingForManagerAsync_Excludes_The_Managers_Own_Requests_Even_If_Self_Assigned()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"self-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var own = await SeedRequestAsync(manager.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(own.Id);
+
+        await using var connection = new SqliteConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Employees SET ManagerId = $managerId WHERE Id = $id";
+        command.Parameters.AddWithValue("$managerId", manager.Id.Value.ToString().ToUpperInvariant());
+        command.Parameters.AddWithValue("$id", manager.Id.Value.ToString().ToUpperInvariant());
+        await command.ExecuteNonQueryAsync();
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .ListPendingForManagerAsync(manager.Id, CancellationToken.None);
+
+        Assert.DoesNotContain(result, request => request.Id == own.Id);
+    }
+
+    private async Task SubmitAsync(RequestId id)
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IRequestRepository>();
+        var request = await repository.GetByIdAsync(id, CancellationToken.None);
+        request!.Submit(Today, DateTime.UtcNow);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+    }
+
+    private async Task CancelAsync(RequestId id)
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IRequestRepository>();
+        var request = await repository.GetByIdAsync(id, CancellationToken.None);
+        request!.Cancel(DateTime.UtcNow);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+    }
 }

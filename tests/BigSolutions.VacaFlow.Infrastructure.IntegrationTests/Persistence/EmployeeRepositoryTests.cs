@@ -173,4 +173,31 @@ public sealed class EmployeeRepositoryTests(SqliteDatabaseFixture fixture) : ICl
         // being reported to the user as an email conflict.
         Assert.NotNull(exception);
     }
+
+    [Fact]
+    public async Task ListByIdsAsync_Returns_Exactly_The_Requested_Ids_And_Ignores_Unknown_Ones()
+    {
+        var first = NewEmployee($"list-first-{Guid.NewGuid():N}@vacaflow.test");
+        var second = NewEmployee($"list-second-{Guid.NewGuid():N}@vacaflow.test");
+        var notRequested = NewEmployee($"list-not-requested-{Guid.NewGuid():N}@vacaflow.test");
+
+        await using (var writeScope = fixture.Services.CreateAsyncScope())
+        {
+            var repository = writeScope.ServiceProvider.GetRequiredService<IEmployeeRepository>();
+            repository.Add(first);
+            repository.Add(second);
+            repository.Add(notRequested);
+            await writeScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var unknownId = new EmployeeId(Guid.NewGuid());
+        var result = await readScope.ServiceProvider.GetRequiredService<IEmployeeRepository>()
+            .ListByIdsAsync([first.Id, second.Id, unknownId], CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, employee => employee.Id == first.Id);
+        Assert.Contains(result, employee => employee.Id == second.Id);
+        Assert.DoesNotContain(result, employee => employee.Id == notRequested.Id);
+    }
 }
