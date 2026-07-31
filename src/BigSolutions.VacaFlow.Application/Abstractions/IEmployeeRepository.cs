@@ -12,5 +12,7 @@ public interface IEmployeeRepository
 
     Task<Employee?> GetByEmailAsync(Email email, CancellationToken cancellationToken);
 
+    Task<Employee?> GetByIdAsync(EmployeeId id, CancellationToken cancellationToken);
+
     void Add(Employee employee);
 }

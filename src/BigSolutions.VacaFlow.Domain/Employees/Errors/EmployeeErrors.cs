@@ -65,9 +65,10 @@ public static class EmployeeErrors
         Field: "role");
 
     /// <remarks>
-    /// Not raised by a handler — the cookie authentication middleware returns
-    /// this directly on every endpoint that requires a session, so no field is
-    /// attached (FR-AUT-011).
+    /// Raised by the cookie authentication middleware on every session-protected
+    /// endpoint (FR-AUT-011), and by <c>GetCurrentUserHandler</c> when a valid
+    /// session names an employee that no longer exists — a data lifecycle
+    /// mismatch, not a bug (US-010 decision D3). Field-less either way.
     /// </remarks>
     public static readonly Error NotAuthenticated = new(
         "VF-AUT-004",
