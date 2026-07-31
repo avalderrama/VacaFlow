@@ -9,9 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace BigSolutions.VacaFlow.Api.FunctionalTests.Endpoints;
 
 /// <summary>
-/// Demonstrates every acceptance criterion of US-015 and US-016 end-to-end,
-/// against the real pipeline: a real cookie session, the seeded catalog
-/// (TE-003), and the real FallbackPolicy.
+/// Demonstrates every acceptance criterion of US-015, US-016 and US-017's
+/// GET /api/requests/{id} end-to-end, against the real pipeline: a real
+/// cookie session, the seeded catalog (TE-003), and the real FallbackPolicy.
 /// </summary>
 public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFixture<VacaFlowApiFactory>
 {
@@ -398,6 +398,67 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         Assert.NotNull(persisted);
         Assert.Equal(sessionEmployeeId, persisted.OwnerId.Value);
         Assert.NotEqual(foreignEmployeeId, persisted.OwnerId.Value);
+    }
+
+    [Fact]
+    public async Task Get_Returns_The_Full_Detail_For_The_Owner()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var start = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+
+        using var createResponse = await _client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
+            typeId, start, start.AddDays(2), "Family trip"));
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetGuid();
+
+        using var response = await _client.GetAsync($"/api/requests/{id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var detail = await response.Content.ReadFromJsonAsync<RequestDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal(id, detail.Id);
+        Assert.Equal(typeId, detail.AbsenceTypeId);
+        Assert.Equal(start, detail.StartDate);
+        Assert.Equal(start.AddDays(2), detail.EndDate);
+        Assert.Equal("Family trip", detail.Reason);
+        Assert.Equal("Draft", detail.State);
+    }
+
+    [Fact]
+    public async Task Get_On_Another_Employees_Draft_Returns_VF_REQ_004()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var victimsDraftId = await CreateDraftAsync(typeId);
+
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.GetAsync($"/api/requests/{victimsDraftId}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-004", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Get_With_A_Nonexistent_Id_Returns_VF_REQ_006()
+    {
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.GetAsync($"/api/requests/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-006", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Get_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.GetAsync($"/api/requests/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
     }
 
     // AC2 (RULE-03, "any other state") is deliberately not exercised at the

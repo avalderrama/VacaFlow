@@ -47,5 +47,20 @@ internal static class RequestEndpoints
             return result.ToHttpResult();
         })
         .RequireAuthorization();
+
+        // Errors are already mapped in ErrorStatusMap by US-016
+        // (VF-REQ-004 -> 403, VF-REQ-006 -> 404) — nothing to add there.
+        group.MapGet("/{id:guid}", async (
+            Guid id,
+            GetRequestByIdHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(id, cancellationToken);
+            return result.ToOkResult(ToDetailResponse);
+        })
+        .RequireAuthorization();
     }
+
+    private static RequestDetailResponse ToDetailResponse(RequestDetailDto dto) =>
+        new(dto.Id, dto.AbsenceTypeId, dto.StartDate, dto.EndDate, dto.Reason, dto.State);
 }
