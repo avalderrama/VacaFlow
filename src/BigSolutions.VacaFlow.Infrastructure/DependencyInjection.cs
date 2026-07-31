@@ -42,6 +42,7 @@ public static class DependencyInjection
 
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IAbsenceTypeRepository, AbsenceTypeRepository>();
+        services.AddScoped<IRequestRepository, RequestRepository>();
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();

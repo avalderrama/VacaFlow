@@ -9,4 +9,10 @@ namespace BigSolutions.VacaFlow.Application.Abstractions;
 public interface IAbsenceTypeRepository
 {
     Task<IReadOnlyList<AbsenceType>> ListActiveAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether an active absence type with this id exists, without loading the
+    /// full aggregate (FR-CAT-003, US-015 plan D6).
+    /// </summary>
+    Task<bool> ExistsActiveAsync(AbsenceTypeId id, CancellationToken cancellationToken);
 }

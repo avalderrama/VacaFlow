@@ -1,5 +1,6 @@
 using BigSolutions.VacaFlow.Application.AbsenceTypes;
 using BigSolutions.VacaFlow.Application.Authentication;
+using BigSolutions.VacaFlow.Application.Requests;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BigSolutions.VacaFlow.Application;
@@ -21,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<SignInHandler>();
         services.AddScoped<GetCurrentUserHandler>();
         services.AddScoped<ListAbsenceTypesHandler>();
+        services.AddScoped<CreateRequestHandler>();
 
         // Further handlers are registered here as they are written, one line
         // each. Work packages 4.3 to 6.2 fill this in; see WBS.md §3.

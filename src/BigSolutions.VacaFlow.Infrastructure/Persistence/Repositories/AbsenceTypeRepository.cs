@@ -12,4 +12,7 @@ internal sealed class AbsenceTypeRepository(VacaFlowDbContext dbContext) : IAbse
             .Where(type => type.IsActive)
             .OrderBy(type => type.Name)
             .ToListAsync(cancellationToken);
+
+    public Task<bool> ExistsActiveAsync(AbsenceTypeId id, CancellationToken cancellationToken) =>
+        dbContext.AbsenceTypes.AnyAsync(type => type.Id == id && type.IsActive, cancellationToken);
 }
