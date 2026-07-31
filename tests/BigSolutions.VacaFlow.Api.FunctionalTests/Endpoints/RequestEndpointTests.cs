@@ -12,9 +12,10 @@ namespace BigSolutions.VacaFlow.Api.FunctionalTests.Endpoints;
 
 /// <summary>
 /// Demonstrates every acceptance criterion of US-015, US-016, US-017's
-/// GET /api/requests/{id} and US-018's POST /api/requests/{id}/submit
-/// end-to-end, against the real pipeline: a real cookie session, the seeded
-/// catalog (TE-003), and the real FallbackPolicy.
+/// GET /api/requests/{id}, US-018's POST /api/requests/{id}/submit and
+/// US-019's POST /api/requests/{id}/cancel end-to-end, against the real
+/// pipeline: a real cookie session, the seeded catalog (TE-003), and the
+/// real FallbackPolicy.
 /// </summary>
 public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFixture<VacaFlowApiFactory>
 {
@@ -606,4 +607,121 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         Assert.NotNull(persisted);
         Assert.Equal(RequestState.Draft, persisted.State);
     }
+
+    [Fact]
+    public async Task Cancel_Own_Draft_Returns_204_And_Persists_The_Transition()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateDraftAsync(typeId);
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Cancelled, persisted.State);
+        Assert.NotNull(persisted.ClosedAtUtc);
+        Assert.Null(persisted.SubmittedAtUtc);
+    }
+
+    [Fact]
+    public async Task Cancel_Own_Submitted_Request_Returns_204_And_Preserves_SubmittedAtUtc()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateAndSubmitDraftAsync(typeId);
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Cancelled, persisted.State);
+        Assert.NotNull(persisted.ClosedAtUtc);
+        Assert.NotNull(persisted.SubmittedAtUtc);
+    }
+
+    [Fact]
+    public async Task Cancel_A_Request_That_Is_Already_Cancelled_Returns_VF_REQ_005_With_The_Interpolated_Message()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateDraftAsync(typeId);
+        using (var firstCancel = await _client.PostAsync($"/api/requests/{id}/cancel", content: null))
+        {
+            firstCancel.EnsureSuccessStatusCode();
+        }
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-005", body.GetProperty("code").GetString());
+        Assert.Equal(
+            "This request cannot move from Cancelled to Cancelled.",
+            body.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Submit_A_Cancelled_Request_Returns_VF_REQ_005_With_The_Interpolated_Message()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateDraftAsync(typeId);
+        using (var cancelResponse = await _client.PostAsync($"/api/requests/{id}/cancel", content: null))
+        {
+            cancelResponse.EnsureSuccessStatusCode();
+        }
+
+        using var response = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-005", body.GetProperty("code").GetString());
+        Assert.Equal(
+            "This request cannot move from Cancelled to Submitted.",
+            body.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Cancel_On_Another_Employees_Draft_Returns_VF_REQ_004()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var victimsDraftId = await CreateDraftAsync(typeId);
+
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.PostAsync($"/api/requests/{victimsDraftId}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-004", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Cancel_With_A_Nonexistent_Id_Returns_VF_REQ_006()
+    {
+        await RegisterAndGetVacationTypeIdAsync();
+
+        using var response = await _client.PostAsync($"/api/requests/{Guid.NewGuid()}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-006", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Cancel_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.PostAsync($"/api/requests/{Guid.NewGuid()}/cancel", content: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
+    }
+
+    // Cancel from Approved/Rejected is deliberately not exercised at the
+    // HTTP level in this class, for the same reason Submit_A_Request_...
+    // (this class) and RequestRepositoryTests could only reach Submitted
+    // and Cancelled directly: those two states are unreachable until
+    // US-021 delivers Decide. The guard (Request.Cancel's single pattern
+    // match) is already proven from Cancelled above; US-021 adds the
+    // Approved/Rejected cases once a real Decide() exists to produce them.
 }

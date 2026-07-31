@@ -255,4 +255,73 @@ public sealed class RequestTests
         Assert.Equal(TypeId, request.AbsenceTypeId);
         Assert.Equal(RequestState.Submitted, request.State);
     }
+
+    [Fact]
+    public void Cancel_Should_Succeed_On_A_Draft()
+    {
+        var request = NewDraft();
+
+        var result = request.Cancel(LaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Cancelled, request.State);
+        Assert.Equal(LaterNowUtc, request.ClosedAtUtc);
+        Assert.Equal(LaterNowUtc, request.UpdatedAtUtc);
+        Assert.Null(request.SubmittedAtUtc);
+        Assert.Equal(NowUtc, request.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void Cancel_Should_Succeed_On_A_Submitted_Request_And_Preserve_SubmittedAtUtc()
+    {
+        var request = NewDraft();
+        request.Submit(Today, LaterNowUtc);
+        var submittedAt = request.SubmittedAtUtc;
+        var evenLaterNowUtc = LaterNowUtc.AddHours(1);
+
+        var result = request.Cancel(evenLaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Cancelled, request.State);
+        Assert.Equal(evenLaterNowUtc, request.ClosedAtUtc);
+        Assert.Equal(evenLaterNowUtc, request.UpdatedAtUtc);
+        Assert.Equal(submittedAt, request.SubmittedAtUtc);
+    }
+
+    [Fact]
+    public void Cancel_Should_Fail_When_The_Request_Is_Already_Cancelled()
+    {
+        var request = NewDraft();
+        request.Cancel(LaterNowUtc);
+        var closedAt = request.ClosedAtUtc;
+        var updatedAt = request.UpdatedAtUtc;
+
+        var result = request.Cancel(LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-005", result.Error.Code);
+        Assert.Equal("This request cannot move from Cancelled to Cancelled.", result.Error.Message);
+        Assert.Equal(closedAt, request.ClosedAtUtc);
+        Assert.Equal(updatedAt, request.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void Submit_Should_Fail_When_The_Request_Is_Already_Cancelled()
+    {
+        var request = NewDraft();
+        request.Cancel(LaterNowUtc);
+
+        var result = request.Submit(Today, LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-005", result.Error.Code);
+        Assert.Equal("This request cannot move from Cancelled to Submitted.", result.Error.Message);
+    }
+
+    // Cancel from Approved/Rejected (the remaining two "final" states) is
+    // unreachable through the aggregate's own public API until US-021
+    // delivers Decide — same situation US-016 plan D7 had with Submitted
+    // until US-018. The guard itself (State is not (Draft or Submitted)) is
+    // a single pattern match already exercised from Cancelled above; US-021
+    // adds the Approved/Rejected cases once Decide exists to produce them.
 }
