@@ -212,6 +212,11 @@ public sealed class SourceRuleTests
     [InlineData("VF-REQ-006", "StatusCodes.Status404NotFound")]
     [InlineData("VF-CAT-001", "StatusCodes.Status400BadRequest")]
     [InlineData("VF-AUT-004", "StatusCodes.Status401Unauthorized")]
+    [InlineData("VF-DEC-001", "StatusCodes.Status409Conflict")]
+    [InlineData("VF-DEC-002", "StatusCodes.Status403Forbidden")]
+    [InlineData("VF-DEC-003", "StatusCodes.Status403Forbidden")]
+    [InlineData("VF-DEC-004", "StatusCodes.Status403Forbidden")]
+    [InlineData("VF-DEC-005", "StatusCodes.Status409Conflict")]
     public void Known_Error_Codes_Should_Map_To_Their_Documented_Status(string code, string expectedStatus)
     {
         var statusMapFile = Path.Combine(

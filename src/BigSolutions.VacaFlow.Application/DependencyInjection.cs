@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<SubmitRequestHandler>();
         services.AddScoped<CancelRequestHandler>();
         services.AddScoped<ListVisibleRequestsHandler>();
+        services.AddScoped<DecideRequestHandler>();
 
         // Further handlers are registered here as they are written, one line
         // each. Work packages 4.3 to 6.2 fill this in; see WBS.md §3.

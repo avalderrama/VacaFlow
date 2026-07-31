@@ -28,6 +28,11 @@ internal static class ErrorStatusMap
         ["VF-REQ-005"] = StatusCodes.Status409Conflict,
         ["VF-REQ-006"] = StatusCodes.Status404NotFound,
         ["VF-CAT-001"] = StatusCodes.Status400BadRequest,
+        ["VF-DEC-001"] = StatusCodes.Status409Conflict,
+        ["VF-DEC-002"] = StatusCodes.Status403Forbidden,
+        ["VF-DEC-003"] = StatusCodes.Status403Forbidden,
+        ["VF-DEC-004"] = StatusCodes.Status403Forbidden,
+        ["VF-DEC-005"] = StatusCodes.Status409Conflict,
     };
 
     public static int StatusFor(string code) =>

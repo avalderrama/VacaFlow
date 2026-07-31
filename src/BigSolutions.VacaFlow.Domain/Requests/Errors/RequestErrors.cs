@@ -80,4 +80,34 @@ public static class RequestErrors
     public static Error InvalidTransition(RequestState from, RequestState to) => new(
         "VF-REQ-005",
         $"This request cannot move from {from} to {to}.");
+
+    /// <remarks>
+    /// Field-less. RULE-05 (US-021) — deciding (approve/reject) requires the
+    /// request to be Submitted. Deliberately its own code, not a reuse of
+    /// InvalidTransition/VF-REQ-005: the FRD catalogue assigns decisions
+    /// their own message, and §4.2 reserves VF-REQ-005 for Submit/Cancel's
+    /// out-of-table transitions.
+    /// </remarks>
+    public static readonly Error OnlySubmittedDecidable = new(
+        "VF-DEC-001",
+        "Only Submitted requests can be approved or rejected.");
+
+    /// <remarks>
+    /// Field-less, same reasoning as OnlySubmittedDecidable. RULE-09
+    /// (US-021) — a request can be decided only once.
+    /// </remarks>
+    public static readonly Error AlreadyDecided = new(
+        "VF-DEC-005",
+        "This request already has a final decision.");
+
+    /// <remarks>
+    /// Not in the Backlog.md §3.5 microcopy catalogue — coined following
+    /// the exact style of the catalogued ones, same precedent as
+    /// AbsenceTypeRequired. FR-DEC-008 (US-021) — the decision comment is
+    /// optional but capped at 500 characters when present.
+    /// </remarks>
+    public static readonly Error CommentTooLong = new(
+        "VF-VAL-001",
+        "The comment must be at most 500 characters.",
+        Field: "comment");
 }

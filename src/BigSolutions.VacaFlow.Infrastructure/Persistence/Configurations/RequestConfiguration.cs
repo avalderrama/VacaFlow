@@ -61,5 +61,39 @@ internal sealed class RequestConfiguration : IEntityTypeConfiguration<Request>
         builder.Property(request => request.ClosedAtUtc);
 
         builder.HasIndex(request => new { request.OwnerId, request.State });
+
+        // Owned in its own table, not the same-table style Period uses
+        // above — Approval needs its own key, its own FK to Employees, and
+        // a unique index on the owner key (RULE-09's safety net, not the
+        // enforcement point — that lives in Request.Decide, CA-INF-003).
+        builder.OwnsOne(request => request.Approval, approval =>
+        {
+            approval.ToTable("Approvals");
+
+            approval.WithOwner().HasForeignKey("RequestId");
+
+            approval.Property(a => a.Id)
+                .HasConversion(id => id.Value, value => new ApprovalId(value));
+            approval.HasKey(a => a.Id);
+
+            approval.HasIndex("RequestId").IsUnique();
+
+            approval.Property(a => a.ResponsibleManagerId)
+                .HasConversion(managerId => managerId.Value, value => new EmployeeId(value))
+                .IsRequired();
+
+            approval.HasOne<Employee>()
+                .WithMany()
+                .HasForeignKey(a => a.ResponsibleManagerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            approval.Property(a => a.Decision)
+                .HasConversion<int>()
+                .IsRequired();
+
+            approval.Property(a => a.Comment).HasMaxLength(500);
+
+            approval.Property(a => a.DecidedAtUtc).IsRequired();
+        });
     }
 }
