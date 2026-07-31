@@ -9,8 +9,8 @@ namespace BigSolutions.VacaFlow.Domain.Requests;
 /// An employee's absence request (Intent.md §7.1, FRD.md §4). Aggregate root:
 /// the request's own lifecycle changes independently of the employee or the
 /// absence type it references (SAD.md §5.1). Exercises <see cref="Create"/>
-/// <see cref="UpdateDetails"/>, <see cref="Submit"/> and <see cref="Cancel"/>
-/// — Decide arrives with its own story (US-021, US-015 plan D5).
+/// <see cref="UpdateDetails"/>, <see cref="Submit"/>, <see cref="Cancel"/>
+/// and <see cref="Decide"/> (US-015 plan D5).
 /// </summary>
 public sealed class Request : AggregateRoot<RequestId>
 {
@@ -61,6 +61,8 @@ public sealed class Request : AggregateRoot<RequestId>
     public DateTime? SubmittedAtUtc { get; private set; }
 
     public DateTime? ClosedAtUtc { get; private set; }
+
+    public Approval? Approval { get; private set; }
 
     public static Result<Request> Create(
         RequestId id,
@@ -172,6 +174,48 @@ public sealed class Request : AggregateRoot<RequestId>
         }
 
         State = RequestState.Cancelled;
+        ClosedAtUtc = nowUtc;
+        UpdatedAtUtc = nowUtc;
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// A manager decides on this request (US-021, transitions T3/T4,
+    /// RULE-05/RULE-09). State and the resulting Approval record are one
+    /// transactional fact (FR-DEC-009): both statements below belong to a
+    /// single method, so no caller can observe one without the other.
+    /// Authorization (RULE-06/07 — is the caller a manager, is this their
+    /// own request, are they assigned to the owner) is Application's
+    /// concern via ApprovalPolicy, checked before this is called.
+    /// SubmittedAtUtc is left untouched — a historical fact, same
+    /// reasoning as Cancel.
+    /// </summary>
+    public Result Decide(
+        ApprovalId approvalId,
+        EmployeeId responsibleManagerId,
+        DecisionType decision,
+        string? comment,
+        DateTime nowUtc)
+    {
+        // Checked before the state guard: once Approval is set, State is no
+        // longer Submitted either (they change together), so checking state
+        // first would make this branch unreachable through the aggregate's
+        // own sequential calls — "already decided" (AC7) is a more specific
+        // and more informative answer than "not submitted" whenever a
+        // decision already exists.
+        if (Approval is not null)
+        {
+            return Result.Failure(RequestErrors.AlreadyDecided);
+        }
+
+        if (State is not RequestState.Submitted)
+        {
+            return Result.Failure(RequestErrors.OnlySubmittedDecidable);
+        }
+
+        Approval = Approval.Create(approvalId, responsibleManagerId, decision, comment, nowUtc);
+        State = decision is DecisionType.Approved ? RequestState.Approved : RequestState.Rejected;
         ClosedAtUtc = nowUtc;
         UpdatedAtUtc = nowUtc;
 

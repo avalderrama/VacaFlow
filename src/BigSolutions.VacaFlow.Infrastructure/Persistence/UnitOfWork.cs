@@ -1,22 +1,28 @@
 using BigSolutions.VacaFlow.Application.Abstractions;
 using BigSolutions.VacaFlow.Domain.Employees.Errors;
 using BigSolutions.VacaFlow.Domain.Primitives;
+using BigSolutions.VacaFlow.Domain.Requests.Errors;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace BigSolutions.VacaFlow.Infrastructure.Persistence;
 
 /// <summary>
-/// Translates the one provider exception this use case expects into an
-/// application-level error before it crosses the ring (CA-INF-005).
+/// Translates the provider exceptions this use case expects into
+/// application-level errors before they cross the ring (CA-INF-005).
 /// </summary>
 /// <remarks>
-/// Only a uniqueness violation on Employees.Email is translated, and only that
-/// one: it is the race window the handler's own check cannot fully close
-/// (plan §3.1, steps 3 and 7). Every other constraint violation is a bug, not
-/// an expected outcome, so it propagates and becomes a 500 — turning a foreign
-/// key or NOT NULL failure into "this email already exists" would report the
-/// wrong cause and hide the defect.
+/// Only two uniqueness violations are translated, and only those: each is
+/// a race window its own handler's in-memory check cannot fully close —
+/// Employees.Email (plan §3.1, steps 3 and 7) and, since US-021,
+/// Approvals.RequestId (two concurrent decisions on the same Submitted
+/// request both pass ApprovalPolicy/Request.Decide's in-memory guard
+/// before either persists; the second SaveChangesAsync hits the unique
+/// index and lands here as VF-DEC-005 — exactly what a second decider
+/// should see for "already decided"). Every other constraint violation is
+/// a bug, not an expected outcome, so it propagates and becomes a 500 —
+/// turning a foreign key or NOT NULL failure into one of these two
+/// messages would report the wrong cause and hide the defect.
 ///
 /// The match is on the *extended* error code. SqliteErrorCode is the primary
 /// code, and 19 (SQLITE_CONSTRAINT) covers every constraint type — unique,
@@ -27,6 +33,7 @@ internal sealed class UnitOfWork(VacaFlowDbContext dbContext) : IUnitOfWork
 {
     private const int SqliteUniqueConstraintViolation = 2067;
     private const string EmailUniqueIndexTarget = "Employees.Email";
+    private const string ApprovalRequestUniqueIndexTarget = "Approvals.RequestId";
 
     public async Task<Result> SaveChangesAsync(CancellationToken cancellationToken)
     {
@@ -35,16 +42,20 @@ internal sealed class UnitOfWork(VacaFlowDbContext dbContext) : IUnitOfWork
             await dbContext.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }
-        catch (DbUpdateException exception) when (IsEmailUniquenessViolation(exception))
+        catch (DbUpdateException exception) when (IsUniquenessViolation(exception, EmailUniqueIndexTarget))
         {
             return Result.Failure(EmployeeErrors.EmailAlreadyRegistered);
         }
+        catch (DbUpdateException exception) when (IsUniquenessViolation(exception, ApprovalRequestUniqueIndexTarget))
+        {
+            return Result.Failure(RequestErrors.AlreadyDecided);
+        }
     }
 
-    private static bool IsEmailUniquenessViolation(DbUpdateException exception) =>
+    private static bool IsUniquenessViolation(DbUpdateException exception, string indexTarget) =>
         exception.InnerException is SqliteException
         {
             SqliteExtendedErrorCode: SqliteUniqueConstraintViolation,
         } sqliteException
-        && sqliteException.Message.Contains(EmailUniqueIndexTarget, StringComparison.Ordinal);
+        && sqliteException.Message.Contains(indexTarget, StringComparison.Ordinal);
 }

@@ -443,4 +443,127 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         request!.Cancel(DateTime.UtcNow);
         await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
     }
+
+    private async Task DecideAsync(RequestId id, EmployeeId managerId, DecisionType decision, string? comment = null)
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IRequestRepository>();
+        var request = await repository.GetByIdAsync(id, CancellationToken.None);
+        request!.Decide(new ApprovalId(Guid.NewGuid()), managerId, decision, comment, DateTime.UtcNow);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Decide_Followed_By_SaveChanges_Should_Persist_The_Approval_As_An_Owned_Entity()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"decide-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var owner = await SeedEmployeeAsync(fixture.Services, $"decide-owner-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var request = await SeedRequestAsync(owner.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(request.Id);
+
+        await DecideAsync(request.Id, manager.Id, DecisionType.Approved, "Enjoy");
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var loaded = await readScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(RequestState.Approved, loaded.State);
+        Assert.NotNull(loaded.Approval);
+        Assert.Equal(manager.Id, loaded.Approval.ResponsibleManagerId);
+        Assert.Equal(DecisionType.Approved, loaded.Approval.Decision);
+        Assert.Equal("Enjoy", loaded.Approval.Comment);
+        Assert.NotNull(loaded.ClosedAtUtc);
+    }
+
+    [Fact]
+    public async Task A_Second_Row_With_The_Same_RequestId_In_Approvals_Should_Violate_The_Unique_Index()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"unique-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var owner = await SeedEmployeeAsync(fixture.Services, $"unique-owner-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var request = await SeedRequestAsync(owner.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(request.Id);
+        await DecideAsync(request.Id, manager.Id, DecisionType.Approved);
+
+        await using var connection = new SqliteConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO Approvals (Id, RequestId, ResponsibleManagerId, Decision, Comment, DecidedAtUtc)
+            VALUES ($id, $requestId, $managerId, 1, NULL, $decidedAtUtc)
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString().ToUpperInvariant());
+        command.Parameters.AddWithValue("$requestId", request.Id.Value.ToString().ToUpperInvariant());
+        command.Parameters.AddWithValue("$managerId", manager.Id.Value.ToString().ToUpperInvariant());
+        command.Parameters.AddWithValue("$decidedAtUtc", DateTime.UtcNow);
+
+        var exception = await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
+        Assert.Contains("Approvals.RequestId", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Exercises UnitOfWork's own translation (not just the raw SQLite
+    /// exception the test above proves the index enforces): two separate
+    /// DbContext scopes each load the same Submitted request and decide on
+    /// it before either saves — the race the in-memory guard alone cannot
+    /// close. The first SaveChangesAsync succeeds; the second must hit the
+    /// unique index and come back as a Result failure (VF-DEC-005), not an
+    /// unhandled exception.
+    /// </summary>
+    [Fact]
+    public async Task Two_Concurrent_Decisions_On_The_Same_Request_Should_Translate_The_Second_To_AlreadyDecided()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"race-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var owner = await SeedEmployeeAsync(fixture.Services, $"race-owner-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var request = await SeedRequestAsync(owner.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(request.Id);
+
+        await using var firstScope = fixture.Services.CreateAsyncScope();
+        await using var secondScope = fixture.Services.CreateAsyncScope();
+
+        var firstRequest = await firstScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+        var secondRequest = await secondScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(request.Id, CancellationToken.None);
+
+        firstRequest!.Decide(new ApprovalId(Guid.NewGuid()), manager.Id, DecisionType.Approved, null, DateTime.UtcNow);
+        secondRequest!.Decide(new ApprovalId(Guid.NewGuid()), manager.Id, DecisionType.Rejected, null, DateTime.UtcNow);
+
+        var firstSave = await firstScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+        Assert.True(firstSave.IsSuccess);
+
+        var secondSave = await secondScope.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None);
+
+        Assert.True(secondSave.IsFailure);
+        Assert.Equal("VF-DEC-005", secondSave.Error.Code);
+    }
+
+    /// <summary>Pays US-020 plan D9: AC3 of the manager queue tested with a real Approved final state, not only Cancelled.</summary>
+    [Fact]
+    public async Task An_Approved_Request_Should_Leave_The_Managers_Queue()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"queue-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var owner = await SeedEmployeeAsync(fixture.Services, $"queue-owner-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var request = await SeedRequestAsync(owner.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(request.Id);
+
+        await using (var scope = fixture.Services.CreateAsyncScope())
+        {
+            var pendingBeforeDecision = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+                .ListPendingForManagerAsync(manager.Id, CancellationToken.None);
+            Assert.Contains(pendingBeforeDecision, r => r.Id == request.Id);
+        }
+
+        await DecideAsync(request.Id, manager.Id, DecisionType.Approved);
+
+        await using var readScope = fixture.Services.CreateAsyncScope();
+        var pendingAfterDecision = await readScope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .ListPendingForManagerAsync(manager.Id, CancellationToken.None);
+
+        Assert.DoesNotContain(pendingAfterDecision, r => r.Id == request.Id);
+    }
 }

@@ -1,6 +1,7 @@
 using BigSolutions.VacaFlow.Api.Contracts;
 using BigSolutions.VacaFlow.Api.ErrorHandling;
 using BigSolutions.VacaFlow.Application.Requests;
+using BigSolutions.VacaFlow.Domain.Requests;
 
 namespace BigSolutions.VacaFlow.Api.Endpoints;
 
@@ -91,6 +92,22 @@ internal static class RequestEndpoints
             CancellationToken cancellationToken) =>
         {
             var result = await handler.Handle(id, cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization();
+
+        // { comment? } (FRD.md §6.3) — no responsibleManagerId in the
+        // contract (FR-DEC-006). DecisionType.Approved is wired here, never
+        // read from the payload — reject (US-022) will wire Rejected onto
+        // the same DecideRequestHandler.
+        group.MapPost("/{id:guid}/approve", async (
+            Guid id,
+            ApproveRequestContract contract,
+            DecideRequestHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new DecideRequestCommand(id, DecisionType.Approved, contract.Comment);
+            var result = await handler.Handle(command, cancellationToken);
             return result.ToHttpResult();
         })
         .RequireAuthorization();

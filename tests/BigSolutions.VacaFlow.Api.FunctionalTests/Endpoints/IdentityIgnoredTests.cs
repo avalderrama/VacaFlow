@@ -1,5 +1,9 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using BigSolutions.VacaFlow.Api.Contracts;
+using BigSolutions.VacaFlow.Application.Abstractions;
+using BigSolutions.VacaFlow.Domain.Requests;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BigSolutions.VacaFlow.Api.FunctionalTests.Endpoints;
 
@@ -78,5 +82,55 @@ public sealed class IdentityIgnoredTests(VacaFlowApiFactory factory) : IClassFix
         var body = await response.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
 
         return (body!.Id, email, password);
+    }
+
+    /// <summary>
+    /// AC2 of US-021: the responsible manager on an Approval is the
+    /// authenticated caller, never a payload value — an injected
+    /// responsibleManagerId has no effect. Uses the seeded manager/employee
+    /// pair (TE-003/Backlog.md §3.6 — Carlos assigned to Laura) since this
+    /// is the only account pairing with a real manager assignment available
+    /// without touching the seed.
+    /// </summary>
+    [Fact]
+    public async Task Approve_Ignores_An_Injected_ResponsibleManagerId()
+    {
+        using var carlosLogin = await _client.PostAsJsonAsync("/api/auth/login", new SignInContract("employee@vacaflow.test", "Employee123!"));
+        carlosLogin.EnsureSuccessStatusCode();
+
+        using var typesResponse = await _client.GetAsync("/api/absence-types");
+        typesResponse.EnsureSuccessStatusCode();
+        var types = await typesResponse.Content.ReadFromJsonAsync<List<AbsenceTypeResponse>>();
+        var typeId = types!.Single(type => type.Code == "VACATION").Id;
+
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        using var createResponse = await _client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
+            typeId, startDate, startDate.AddDays(2), "Family trip"));
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetGuid();
+
+        using var submitResponse = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+        submitResponse.EnsureSuccessStatusCode();
+
+        using var lauraLogin = await _client.PostAsJsonAsync("/api/auth/login", new SignInContract("manager@vacaflow.test", "Manager123!"));
+        lauraLogin.EnsureSuccessStatusCode();
+        var laura = await lauraLogin.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["comment"] = "x",
+            ["responsibleManagerId"] = Guid.NewGuid(),
+        };
+
+        using var approveResponse = await _client.PostAsJsonAsync($"/api/requests/{id}/approve", payload);
+        approveResponse.EnsureSuccessStatusCode();
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var persisted = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(new RequestId(id), CancellationToken.None);
+
+        Assert.NotNull(persisted?.Approval);
+        Assert.Equal(laura!.Id, persisted.Approval.ResponsibleManagerId.Value);
     }
 }

@@ -43,9 +43,12 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
     private Task<Guid> CreateDraftAsync(Guid absenceTypeId) =>
         CreateDraftAsync(absenceTypeId, DateOnly.FromDateTime(DateTime.UtcNow));
 
-    private async Task<Guid> CreateDraftAsync(Guid absenceTypeId, DateOnly startDate)
+    private Task<Guid> CreateDraftAsync(Guid absenceTypeId, DateOnly startDate) =>
+        CreateDraftAsync(_client, absenceTypeId, startDate);
+
+    private static async Task<Guid> CreateDraftAsync(HttpClient client, Guid absenceTypeId, DateOnly startDate)
     {
-        using var response = await _client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
+        using var response = await client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
             absenceTypeId, startDate, startDate.AddDays(2), "Family trip"));
         response.EnsureSuccessStatusCode();
 
@@ -902,5 +905,204 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         submitResponse.EnsureSuccessStatusCode();
 
         return id;
+    }
+
+    private static async Task<Guid> RegisterAsManagerAsync(HttpClient client)
+    {
+        using var response = await client.PostAsJsonAsync("/api/auth/register", new RegisterAccountContract(
+            "Approve Test Manager", $"{Guid.NewGuid():N}@vacaflow.test", "Password123!", "Manager"));
+        response.EnsureSuccessStatusCode();
+        var registered = await response.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
+        return registered!.Id;
+    }
+
+    /// <summary>AC1: Carlos (seeded, assigned to Laura) submits; Laura approves.</summary>
+    [Fact]
+    public async Task Approve_A_Submitted_Request_From_An_Assigned_Employee_Returns_204()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract("Enjoy"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Approved, persisted.State);
+        Assert.NotNull(persisted.Approval);
+        Assert.Equal(DecisionType.Approved, persisted.Approval.Decision);
+        Assert.Equal("Enjoy", persisted.Approval.Comment);
+        Assert.NotNull(persisted.ClosedAtUtc);
+
+        using var queueResponse = await lauraClient.GetAsync("/api/requests");
+        var queue = await queueResponse.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.DoesNotContain(queue!, item => item.Id == id);
+    }
+
+    // AC2 (the responsible manager is the authenticated caller, never a
+    // payload value) is exercised in IdentityIgnoredTests — its natural
+    // home alongside every other identity-injection test in this project.
+
+    /// <summary>AC3: any state other than Submitted — Carlos (assigned to Laura) leaves a draft unsubmitted.</summary>
+    [Fact]
+    public async Task Approve_A_Draft_Returns_VF_DEC_001()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-001", body.GetProperty("code").GetString());
+        Assert.Equal("Only Submitted requests can be approved or rejected.", body.GetProperty("message").GetString());
+    }
+
+    /// <summary>AC4: a non-manager caller.</summary>
+    [Fact]
+    public async Task Approve_By_A_Non_Manager_Returns_VF_DEC_002()
+    {
+        var anaClient = factory.CreateClient();
+        await LoginAsAsync(anaClient, "ana@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(anaClient));
+        var id = await CreateAndSubmitDraftAsync(anaClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+
+        using var response = await carlosClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-002", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC5: a manager deciding their own request.</summary>
+    [Fact]
+    public async Task Approve_Own_Request_Returns_VF_DEC_004()
+    {
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(lauraClient));
+        var id = await CreateAndSubmitDraftAsync(lauraClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-004", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC6: a manager not assigned to the owner's employee.</summary>
+    [Fact]
+    public async Task Approve_By_An_Unassigned_Manager_Returns_VF_DEC_003()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var otherManagerClient = factory.CreateClient();
+        await RegisterAsManagerAsync(otherManagerClient);
+
+        using var response = await otherManagerClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-003", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC6/OQ-B: fail-closed when the owner has no assigned manager at all.</summary>
+    [Fact]
+    public async Task Approve_An_Unassigned_Employees_Request_Returns_VF_DEC_003()
+    {
+        var (_, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var id = await CreateAndSubmitDraftAsync(_client, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-003", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC7: a request that already has a final decision.</summary>
+    [Fact]
+    public async Task Approve_An_Already_Decided_Request_Returns_VF_DEC_005()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        using (var firstApprove = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null)))
+        {
+            firstApprove.EnsureSuccessStatusCode();
+        }
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-005", body.GetProperty("code").GetString());
+        Assert.Equal("This request already has a final decision.", body.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Approve_With_A_Comment_Over_500_Characters_Returns_VF_VAL_001()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        var tooLong = new string('a', 501);
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(tooLong));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-VAL-001", body.GetProperty("code").GetString());
+        Assert.Equal("comment", body.GetProperty("field").GetString());
+    }
+
+    [Fact]
+    public async Task Approve_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.PostAsJsonAsync($"/api/requests/{Guid.NewGuid()}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Approve_A_Nonexistent_Id_Returns_VF_REQ_006()
+    {
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{Guid.NewGuid()}/approve", new ApproveRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-REQ-006", body.GetProperty("code").GetString());
     }
 }

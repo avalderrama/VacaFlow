@@ -318,10 +318,139 @@ public sealed class RequestTests
         Assert.Equal("This request cannot move from Cancelled to Submitted.", result.Error.Message);
     }
 
-    // Cancel from Approved/Rejected (the remaining two "final" states) is
-    // unreachable through the aggregate's own public API until US-021
-    // delivers Decide — same situation US-016 plan D7 had with Submitted
-    // until US-018. The guard itself (State is not (Draft or Submitted)) is
-    // a single pattern match already exercised from Cancelled above; US-021
-    // adds the Approved/Rejected cases once Decide exists to produce them.
+    private Request NewSubmittedRequest()
+    {
+        var request = NewDraft();
+        request.Submit(Today, NowUtc);
+        return request;
+    }
+
+    [Fact]
+    public void Decide_Should_Succeed_When_Approving_A_Submitted_Request()
+    {
+        var request = NewSubmittedRequest();
+        var managerId = new EmployeeId(Guid.NewGuid());
+        var approvalId = new ApprovalId(Guid.NewGuid());
+
+        var result = request.Decide(approvalId, managerId, DecisionType.Approved, "Enjoy", LaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Approved, request.State);
+        Assert.NotNull(request.Approval);
+        Assert.Equal(approvalId, request.Approval.Id);
+        Assert.Equal(managerId, request.Approval.ResponsibleManagerId);
+        Assert.Equal(DecisionType.Approved, request.Approval.Decision);
+        Assert.Equal("Enjoy", request.Approval.Comment);
+        Assert.Equal(LaterNowUtc, request.Approval.DecidedAtUtc);
+        Assert.Equal(LaterNowUtc, request.ClosedAtUtc);
+        Assert.Equal(LaterNowUtc, request.UpdatedAtUtc);
+        Assert.Equal(NowUtc, request.SubmittedAtUtc);
+    }
+
+    [Fact]
+    public void Decide_Should_Succeed_When_Rejecting_A_Submitted_Request()
+    {
+        var request = NewSubmittedRequest();
+        var managerId = new EmployeeId(Guid.NewGuid());
+        var approvalId = new ApprovalId(Guid.NewGuid());
+
+        var result = request.Decide(approvalId, managerId, DecisionType.Rejected, null, LaterNowUtc);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Rejected, request.State);
+        Assert.NotNull(request.Approval);
+        Assert.Equal(DecisionType.Rejected, request.Approval.Decision);
+        Assert.Null(request.Approval.Comment);
+    }
+
+    /// <summary>
+    /// Only the states reachable with Approval still null (Draft,
+    /// Cancelled) exercise this guard through Decide's own sequential
+    /// calls — Approved/Rejected always carry a non-null Approval by the
+    /// time they exist, so a second Decide on those hits the
+    /// already-decided guard first (VF-DEC-005, see the theory below), not
+    /// this one. Calling Decide on a Draft to try to reach Approved/
+    /// Rejected would itself fail with VF-DEC-001 and mutate nothing —
+    /// that used to be exactly the vacuous setup this test had.
+    /// </summary>
+    [Theory]
+    [InlineData(RequestState.Draft)]
+    [InlineData(RequestState.Cancelled)]
+    public void Decide_Should_Fail_When_The_Request_Is_Not_Submitted_And_Has_No_Decision(RequestState nonSubmittedState)
+    {
+        var request = NewDraft();
+        if (nonSubmittedState is RequestState.Cancelled)
+        {
+            request.Cancel(NowUtc);
+        }
+
+        var result = request.Decide(new ApprovalId(Guid.NewGuid()), new EmployeeId(Guid.NewGuid()), DecisionType.Approved, null, LaterNowUtc);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-DEC-001", result.Error.Code);
+        Assert.Equal("Only Submitted requests can be approved or rejected.", result.Error.Message);
+        Assert.Null(request.Approval);
+    }
+
+    [Theory]
+    [InlineData(DecisionType.Approved)]
+    [InlineData(DecisionType.Rejected)]
+    public void Decide_Should_Fail_When_The_Request_Already_Has_A_Final_Decision(DecisionType firstDecision)
+    {
+        var request = NewSubmittedRequest();
+        var managerId = new EmployeeId(Guid.NewGuid());
+        request.Decide(new ApprovalId(Guid.NewGuid()), managerId, firstDecision, "First", LaterNowUtc);
+        var originalApproval = request.Approval;
+
+        var result = request.Decide(new ApprovalId(Guid.NewGuid()), managerId, DecisionType.Rejected, "Second", LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-DEC-005", result.Error.Code);
+        Assert.Equal("This request already has a final decision.", result.Error.Message);
+        Assert.Same(originalApproval, request.Approval);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Decide_Should_Normalize_A_Blank_Comment_To_Null(string? comment)
+    {
+        var request = NewSubmittedRequest();
+
+        request.Decide(new ApprovalId(Guid.NewGuid()), new EmployeeId(Guid.NewGuid()), DecisionType.Approved, comment, LaterNowUtc);
+
+        Assert.Null(request.Approval!.Comment);
+    }
+
+    [Fact]
+    public void Decide_Should_Trim_The_Comment()
+    {
+        var request = NewSubmittedRequest();
+
+        request.Decide(new ApprovalId(Guid.NewGuid()), new EmployeeId(Guid.NewGuid()), DecisionType.Approved, "  Enjoy  ", LaterNowUtc);
+
+        Assert.Equal("Enjoy", request.Approval!.Comment);
+    }
+
+    /// <remarks>
+    /// Settles the debt this class's own history carried: Cancel from
+    /// Approved/Rejected was unreachable through the aggregate's own public
+    /// API until Decide existed to produce those states. Now reached the
+    /// legitimate way.
+    /// </remarks>
+    [Theory]
+    [InlineData(DecisionType.Approved, RequestState.Approved)]
+    [InlineData(DecisionType.Rejected, RequestState.Rejected)]
+    public void Cancel_Should_Fail_When_The_Request_Has_Already_Been_Decided(DecisionType decision, RequestState expectedState)
+    {
+        var request = NewSubmittedRequest();
+        request.Decide(new ApprovalId(Guid.NewGuid()), new EmployeeId(Guid.NewGuid()), decision, null, LaterNowUtc);
+
+        var result = request.Cancel(LaterNowUtc.AddHours(1));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VF-REQ-005", result.Error.Code);
+        Assert.Equal($"This request cannot move from {expectedState} to Cancelled.", result.Error.Message);
+    }
 }
