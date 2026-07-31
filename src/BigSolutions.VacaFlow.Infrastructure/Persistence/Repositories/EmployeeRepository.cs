@@ -36,4 +36,10 @@ internal sealed class EmployeeRepository(VacaFlowDbContext dbContext) : IEmploye
         dbContext.Employees.FirstOrDefaultAsync(employee => employee.Id == id, cancellationToken);
 
     public void Add(Employee employee) => dbContext.Employees.Add(employee);
+
+    public async Task<IReadOnlyList<Employee>> ListByIdsAsync(IReadOnlyCollection<EmployeeId> ids, CancellationToken cancellationToken) =>
+        await dbContext.Employees
+            .AsNoTracking()
+            .Where(employee => ids.Contains(employee.Id))
+            .ToListAsync(cancellationToken);
 }

@@ -77,4 +77,50 @@ public sealed class AbsenceTypeRepositoryTests(SqliteDatabaseFixture fixture) : 
         command.Parameters.AddWithValue("$isActive", isActive);
         await command.ExecuteNonQueryAsync();
     }
+
+    [Fact]
+    public async Task ListByIdsAsync_Returns_Exactly_The_Requested_Ids_And_Ignores_Unknown_Ones()
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAbsenceTypeRepository>();
+        var seeded = await repository.ListActiveAsync(CancellationToken.None);
+        var vacation = seeded.Single(type => type.Code.Value == "VACATION");
+        var sickLeave = seeded.Single(type => type.Code.Value == "SICK_LEAVE");
+
+        var result = await repository.ListByIdsAsync([vacation.Id, sickLeave.Id, new(Guid.NewGuid())], CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, type => type.Id == vacation.Id);
+        Assert.Contains(result, type => type.Id == sickLeave.Id);
+    }
+
+    /// <summary>
+    /// D7: unlike ListActiveAsync, a request whose absence type was later
+    /// deactivated must still resolve its code/name — the fixture's shared
+    /// database is reverted in a finally block, same pattern as
+    /// ListActiveAsync_Should_Exclude_An_Inactive_Type above.
+    /// </summary>
+    [Fact]
+    public async Task ListByIdsAsync_Includes_Inactive_Types()
+    {
+        await using var connection = new SqliteConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAbsenceTypeRepository>();
+        var sickLeave = (await repository.ListActiveAsync(CancellationToken.None)).Single(type => type.Code.Value == "SICK_LEAVE");
+
+        await SetSickLeaveActiveAsync(connection, isActive: false);
+        try
+        {
+            var result = await repository.ListByIdsAsync([sickLeave.Id], CancellationToken.None);
+
+            var found = Assert.Single(result);
+            Assert.Equal("Sick Leave", found.Name);
+        }
+        finally
+        {
+            await SetSickLeaveActiveAsync(connection, isActive: true);
+        }
+    }
 }

@@ -21,16 +21,19 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private async Task<(Guid EmployeeId, Guid AbsenceTypeId)> RegisterAndGetVacationTypeIdAsync()
+    private Task<(Guid EmployeeId, Guid AbsenceTypeId)> RegisterAndGetVacationTypeIdAsync() =>
+        RegisterAndGetVacationTypeIdAsync(_client);
+
+    private static async Task<(Guid EmployeeId, Guid AbsenceTypeId)> RegisterAndGetVacationTypeIdAsync(HttpClient client)
     {
         var email = $"{Guid.NewGuid():N}@vacaflow.test";
 
-        using var registerResponse = await _client.PostAsJsonAsync("/api/auth/register", new RegisterAccountContract(
+        using var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterAccountContract(
             "Request Test User", email, "Password123!", "Employee"));
         registerResponse.EnsureSuccessStatusCode();
         var registered = await registerResponse.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
 
-        using var typesResponse = await _client.GetAsync("/api/absence-types");
+        using var typesResponse = await client.GetAsync("/api/absence-types");
         typesResponse.EnsureSuccessStatusCode();
         var types = await typesResponse.Content.ReadFromJsonAsync<List<AbsenceTypeResponse>>();
 
@@ -724,4 +727,180 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
     // US-021 delivers Decide. The guard (Request.Cancel's single pattern
     // match) is already proven from Cancelled above; US-021 adds the
     // Approved/Rejected cases once a real Decide() exists to produce them.
+
+    /// <summary>
+    /// Logs into a seeded account (TE-003/Backlog.md §3.6 — Carlos and Ana
+    /// are assigned to Laura the manager) on this test's own HttpClient,
+    /// returning the employee id from the login response body.
+    /// </summary>
+    private async Task<Guid> LoginAsSeededAccountAsync(string email, string password)
+    {
+        using var response = await _client.PostAsJsonAsync("/api/auth/login", new SignInContract(email, password));
+        response.EnsureSuccessStatusCode();
+        var user = await response.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
+        return user!.Id;
+    }
+
+    private async Task<Guid> CreateAndSubmitDraftAsync(Guid absenceTypeId, DateOnly startDate)
+    {
+        var id = await CreateDraftAsync(absenceTypeId, startDate);
+        using var response = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+        response.EnsureSuccessStatusCode();
+        return id;
+    }
+
+    private static Guid GetVacationTypeId(List<AbsenceTypeResponse> types) =>
+        types.Single(type => type.Code == "VACATION").Id;
+
+    /// <summary>AC1: the manager receives the Submitted requests of the employees assigned to them.</summary>
+    [Fact]
+    public async Task Get_As_Manager_Returns_Submitted_Requests_Of_Assigned_Employees()
+    {
+        var carlosClient = factory.CreateClient();
+        var carlosId = await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        var carlosRequestId = await CreateAndSubmitDraftAsync(carlosClient, typeId, startDate);
+
+        var laraId = await LoginAsSeededAccountAsync("manager@vacaflow.test", "Manager123!");
+
+        using var response = await _client.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.NotNull(body);
+        var carlosItem = Assert.Single(body, item => item.Id == carlosRequestId);
+        Assert.Equal("Carlos Ruiz", carlosItem.Employee.FullName);
+        Assert.Equal("Submitted", carlosItem.State);
+        Assert.Equal("VACATION", carlosItem.AbsenceType.Code);
+        Assert.NotEqual(laraId, carlosItem.Employee.Id);
+    }
+
+    /// <summary>AC2: a submitted request belonging to another manager's employee is absent.</summary>
+    [Fact]
+    public async Task Get_As_Manager_Excludes_Submitted_Requests_Of_Unassigned_Employees()
+    {
+        var (unassignedEmployeeId, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        var unassignedRequestId = await CreateAndSubmitDraftAsync(typeId, startDate);
+
+        var managerClient = factory.CreateClient();
+        await LoginAsAsync(managerClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await managerClient.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.NotNull(body);
+        Assert.DoesNotContain(body, item => item.Id == unassignedRequestId);
+        Assert.DoesNotContain(body, item => item.Employee.Id == unassignedEmployeeId);
+    }
+
+    /// <summary>AC3: a request in a final state is absent from the manager's queue.</summary>
+    [Fact]
+    public async Task Get_As_Manager_Excludes_Requests_In_A_Final_State()
+    {
+        var anaClient = factory.CreateClient();
+        await LoginAsAsync(anaClient, "ana@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(anaClient));
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        var cancelledId = await CreateAndSubmitDraftAsync(anaClient, typeId, startDate);
+        using (var cancelResponse = await anaClient.PostAsync($"/api/requests/{cancelledId}/cancel", content: null))
+        {
+            cancelResponse.EnsureSuccessStatusCode();
+        }
+
+        var managerClient = factory.CreateClient();
+        await LoginAsAsync(managerClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await managerClient.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.NotNull(body);
+        Assert.DoesNotContain(body, item => item.Id == cancelledId);
+    }
+
+    /// <summary>AC4: a manager's own request is present as their own, but exactly once — never duplicated by the queue.</summary>
+    [Fact]
+    public async Task Get_As_Manager_Includes_Their_Own_Request_Exactly_Once()
+    {
+        var managerClient = factory.CreateClient();
+        var managerId = await LoginAsAsync(managerClient, "manager@vacaflow.test", "Manager123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(managerClient));
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        var ownRequestId = await CreateAndSubmitDraftAsync(managerClient, typeId, startDate);
+
+        using var response = await managerClient.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.NotNull(body);
+        var matches = body.Where(item => item.Id == ownRequestId).ToList();
+        var ownItem = Assert.Single(matches);
+        Assert.Equal(managerId, ownItem.Employee.Id);
+    }
+
+    /// <summary>AC5: an employee sees only their own requests, in every state; the filter is server-side.</summary>
+    [Fact]
+    public async Task Get_As_Employee_Returns_Only_Their_Own_Requests_In_Every_State()
+    {
+        var (myEmployeeId, typeId) = await RegisterAndGetVacationTypeIdAsync();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var draftId = await CreateDraftAsync(typeId, today.AddDays(1));
+        var submittedId = await CreateAndSubmitDraftAsync(typeId, today.AddDays(2));
+
+        var otherClient = factory.CreateClient();
+        var (_, otherTypeId) = await RegisterAndGetVacationTypeIdAsync(otherClient);
+        await CreateAndSubmitDraftAsync(otherClient, otherTypeId, today.AddDays(1));
+
+        using var response = await _client.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body.Count);
+        Assert.All(body, item => Assert.Equal(myEmployeeId, item.Employee.Id));
+        Assert.Contains(body, item => item.Id == draftId);
+        Assert.Contains(body, item => item.Id == submittedId);
+    }
+
+    [Fact]
+    public async Task Get_List_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.GetAsync("/api/requests");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
+    }
+
+    private static async Task<Guid> LoginAsAsync(HttpClient client, string email, string password)
+    {
+        using var response = await client.PostAsJsonAsync("/api/auth/login", new SignInContract(email, password));
+        response.EnsureSuccessStatusCode();
+        var user = await response.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
+        return user!.Id;
+    }
+
+    private static async Task<List<AbsenceTypeResponse>> ListAbsenceTypesAsync(HttpClient client)
+    {
+        using var response = await client.GetAsync("/api/absence-types");
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<List<AbsenceTypeResponse>>())!;
+    }
+
+    private static async Task<Guid> CreateAndSubmitDraftAsync(HttpClient client, Guid absenceTypeId, DateOnly startDate)
+    {
+        using var createResponse = await client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
+            absenceTypeId, startDate, startDate.AddDays(2), "Family trip"));
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetGuid();
+
+        using var submitResponse = await client.PostAsync($"/api/requests/{id}/submit", content: null);
+        submitResponse.EnsureSuccessStatusCode();
+
+        return id;
+    }
 }

@@ -15,4 +15,12 @@ public interface IAbsenceTypeRepository
     /// full aggregate (FR-CAT-003, US-015 plan D6).
     /// </summary>
     Task<bool> ExistsActiveAsync(AbsenceTypeId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Batch resolution by id, for enriching a list without N+1 (US-020).
+    /// Unlike ListActiveAsync, this includes inactive types: a historical
+    /// request whose absence type was later deactivated must still show its
+    /// code/name.
+    /// </summary>
+    Task<IReadOnlyList<AbsenceType>> ListByIdsAsync(IReadOnlyCollection<AbsenceTypeId> ids, CancellationToken cancellationToken);
 }

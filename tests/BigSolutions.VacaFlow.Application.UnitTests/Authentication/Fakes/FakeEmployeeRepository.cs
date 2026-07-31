@@ -35,4 +35,7 @@ internal sealed class FakeEmployeeRepository : IEmployeeRepository
         Task.FromResult(_employeesByEmail.Values.FirstOrDefault(employee => employee.Id == id));
 
     public void Add(Employee employee) => AddedEmployees.Add(employee);
+
+    public Task<IReadOnlyList<Employee>> ListByIdsAsync(IReadOnlyCollection<EmployeeId> ids, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Employee>>(_employeesByEmail.Values.Where(employee => ids.Contains(employee.Id)).ToList());
 }

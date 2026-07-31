@@ -15,4 +15,10 @@ internal sealed class AbsenceTypeRepository(VacaFlowDbContext dbContext) : IAbse
 
     public Task<bool> ExistsActiveAsync(AbsenceTypeId id, CancellationToken cancellationToken) =>
         dbContext.AbsenceTypes.AnyAsync(type => type.Id == id && type.IsActive, cancellationToken);
+
+    public async Task<IReadOnlyList<AbsenceType>> ListByIdsAsync(IReadOnlyCollection<AbsenceTypeId> ids, CancellationToken cancellationToken) =>
+        await dbContext.AbsenceTypes
+            .AsNoTracking()
+            .Where(type => ids.Contains(type.Id))
+            .ToListAsync(cancellationToken);
 }

@@ -48,6 +48,18 @@ internal static class RequestEndpoints
         })
         .RequireAuthorization();
 
+        // No query parameters (FR-VIS-001: "the caller cannot influence this
+        // through parameters") — the visible set is decided entirely by
+        // ICurrentUser.Role, never by anything the client sends.
+        group.MapGet("", async (
+            ListVisibleRequestsHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await handler.Handle(cancellationToken);
+            return result.ToOkResult(dtos => dtos.Select(ToSummaryResponse).ToList());
+        })
+        .RequireAuthorization();
+
         // Errors are already mapped in ErrorStatusMap by US-016
         // (VF-REQ-004 -> 403, VF-REQ-006 -> 404) — nothing to add there.
         group.MapGet("/{id:guid}", async (
@@ -86,4 +98,14 @@ internal static class RequestEndpoints
 
     private static RequestDetailResponse ToDetailResponse(RequestDetailDto dto) =>
         new(dto.Id, dto.AbsenceTypeId, dto.StartDate, dto.EndDate, dto.Reason, dto.State);
+
+    private static RequestSummaryResponse ToSummaryResponse(RequestSummaryDto dto) => new(
+        dto.Id,
+        new AbsenceTypeSummaryResponse(dto.AbsenceType.Id, dto.AbsenceType.Code, dto.AbsenceType.Name),
+        dto.StartDate,
+        dto.EndDate,
+        dto.Reason,
+        dto.State,
+        new EmployeeSummaryResponse(dto.Employee.Id, dto.Employee.FullName),
+        dto.CreatedAtUtc);
 }
