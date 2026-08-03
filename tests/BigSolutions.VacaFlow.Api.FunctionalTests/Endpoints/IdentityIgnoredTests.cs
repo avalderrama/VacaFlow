@@ -133,4 +133,52 @@ public sealed class IdentityIgnoredTests(VacaFlowApiFactory factory) : IClassFix
         Assert.NotNull(persisted?.Approval);
         Assert.Equal(laura!.Id, persisted.Approval.ResponsibleManagerId.Value);
     }
+
+    /// <summary>
+    /// AC4 of US-022 (same guarantee applies identically to reject): the
+    /// responsible manager on a rejection's Approval is the authenticated
+    /// caller, never a payload value.
+    /// </summary>
+    [Fact]
+    public async Task Reject_Ignores_An_Injected_ResponsibleManagerId()
+    {
+        using var carlosLogin = await _client.PostAsJsonAsync("/api/auth/login", new SignInContract("employee@vacaflow.test", "Employee123!"));
+        carlosLogin.EnsureSuccessStatusCode();
+
+        using var typesResponse = await _client.GetAsync("/api/absence-types");
+        typesResponse.EnsureSuccessStatusCode();
+        var types = await typesResponse.Content.ReadFromJsonAsync<List<AbsenceTypeResponse>>();
+        var typeId = types!.Single(type => type.Code == "VACATION").Id;
+
+        var startDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+        using var createResponse = await _client.PostAsJsonAsync("/api/requests", new CreateRequestContract(
+            typeId, startDate, startDate.AddDays(2), "Family trip"));
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetGuid();
+
+        using var submitResponse = await _client.PostAsync($"/api/requests/{id}/submit", content: null);
+        submitResponse.EnsureSuccessStatusCode();
+
+        using var lauraLogin = await _client.PostAsJsonAsync("/api/auth/login", new SignInContract("manager@vacaflow.test", "Manager123!"));
+        lauraLogin.EnsureSuccessStatusCode();
+        var laura = await lauraLogin.Content.ReadFromJsonAsync<AuthenticatedUserResponse>();
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["comment"] = "x",
+            ["responsibleManagerId"] = Guid.NewGuid(),
+        };
+
+        using var rejectResponse = await _client.PostAsJsonAsync($"/api/requests/{id}/reject", payload);
+        rejectResponse.EnsureSuccessStatusCode();
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var persisted = await scope.ServiceProvider.GetRequiredService<IRequestRepository>()
+            .GetByIdAsync(new RequestId(id), CancellationToken.None);
+
+        Assert.NotNull(persisted?.Approval);
+        Assert.Equal(DecisionType.Rejected, persisted.Approval.Decision);
+        Assert.Equal(laura!.Id, persisted.Approval.ResponsibleManagerId.Value);
+    }
 }

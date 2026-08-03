@@ -98,8 +98,8 @@ internal static class RequestEndpoints
 
         // { comment? } (FRD.md §6.3) — no responsibleManagerId in the
         // contract (FR-DEC-006). DecisionType.Approved is wired here, never
-        // read from the payload — reject (US-022) will wire Rejected onto
-        // the same DecideRequestHandler.
+        // read from the payload — reject (US-022) wires Rejected onto the
+        // same DecideRequestHandler below.
         group.MapPost("/{id:guid}/approve", async (
             Guid id,
             ApproveRequestContract contract,
@@ -107,6 +107,21 @@ internal static class RequestEndpoints
             CancellationToken cancellationToken) =>
         {
             var command = new DecideRequestCommand(id, DecisionType.Approved, contract.Comment);
+            var result = await handler.Handle(command, cancellationToken);
+            return result.ToHttpResult();
+        })
+        .RequireAuthorization();
+
+        // { comment? } (FRD.md §6.3) — same shared contract shape and
+        // handler as approve; DecisionType.Rejected is wired here, never
+        // read from the payload.
+        group.MapPost("/{id:guid}/reject", async (
+            Guid id,
+            RejectRequestContract contract,
+            DecideRequestHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new DecideRequestCommand(id, DecisionType.Rejected, contract.Comment);
             var result = await handler.Handle(command, cancellationToken);
             return result.ToHttpResult();
         })
