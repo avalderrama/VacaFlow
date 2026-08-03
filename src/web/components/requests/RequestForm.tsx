@@ -6,7 +6,18 @@ import { createRequest, updateRequest, listAbsenceTypes, ApplicationError } from
 import { setPendingNotification } from '@/lib/session';
 import type { AbsenceType, RequestDetail } from '@/lib/types';
 
-type RequestFormProps = { mode: 'create' } | { mode: 'edit'; initial: RequestDetail };
+type RequestFormProps =
+  | { mode: 'create' }
+  | {
+      mode: 'edit';
+      initial: RequestDetail;
+      // `onCancelRequest` is offered only for a Submitted request (US-019
+      // AC4); the page decides when to pass it. The DECISION block (S-06,
+      // US-025) is derived from `initial.approval` itself — the server
+      // only ever populates it for Approved/Rejected.
+      onCancelRequest?: () => void;
+      cancellingRequest?: boolean;
+    };
 
 interface FieldErrors {
   absenceTypeId?: string;
@@ -35,6 +46,14 @@ function emptyServerSnapshot(): string {
   return '';
 }
 
+// DecidedAtUtc travels as a bare ISO string with no "Z" (the SQLite column
+// carries no timezone offset), which `new Date(...)` would otherwise parse
+// as local time — appending "Z" is what actually makes it UTC.
+function formatUtcDateTime(isoWithoutZone: string): string {
+  const withZone = isoWithoutZone.endsWith('Z') ? isoWithoutZone : `${isoWithoutZone}Z`;
+  return new Date(withZone).toLocaleString();
+}
+
 // The same field labels §7 of the FRD uses for its error catalogue's
 // `field` values, so a VF-VAL-001/VF-REQ-001/VF-REQ-002 response maps
 // straight onto a control.
@@ -54,6 +73,9 @@ export function RequestForm(props: RequestFormProps) {
   const router = useRouter();
   const initial = props.mode === 'edit' ? props.initial : undefined;
   const editable = props.mode === 'create' || initial!.state === 'Draft';
+  const decision = initial?.approval;
+  const onCancelRequest = props.mode === 'edit' ? props.onCancelRequest : undefined;
+  const cancellingRequest = props.mode === 'edit' ? props.cancellingRequest : undefined;
 
   const [absenceTypes, setAbsenceTypes] = useState<AbsenceType[]>([]);
   const [absenceTypeId, setAbsenceTypeId] = useState(initial?.absenceTypeId ?? '');
@@ -253,6 +275,46 @@ export function RequestForm(props: RequestFormProps) {
         </div>
       </div>
 
+      {decision && (
+        <div
+          style={{
+            marginTop: '24px',
+            paddingTop: '20px',
+            borderTop: '1px solid oklch(92% 0.006 260)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '.04em',
+              color: 'oklch(55% 0.02 260)',
+            }}
+          >
+            Decision
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: 600, marginTop: '4px' }}>{decision.decision}</div>
+          <div style={{ fontSize: '14px', color: 'oklch(40% 0.02 260)', marginTop: '4px' }}>
+            By {decision.responsibleManagerName} · {formatUtcDateTime(decision.decidedAtUtc)}
+          </div>
+          {decision.comment && (
+            <div
+              style={{
+                fontSize: '14px',
+                color: 'oklch(30% 0.02 260)',
+                background: 'oklch(97% 0.004 250)',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                marginTop: '10px',
+              }}
+            >
+              {decision.comment}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '12px', marginTop: '28px', alignItems: 'center', flexWrap: 'wrap' }}>
         {editable && (
           <button type="submit" disabled={saving} className="btn-primary">
@@ -262,6 +324,27 @@ export function RequestForm(props: RequestFormProps) {
         <button type="button" onClick={() => router.push('/requests')} className="btn-secondary">
           {cancelLabel}
         </button>
+        {onCancelRequest && (
+          <button
+            type="button"
+            onClick={onCancelRequest}
+            disabled={cancellingRequest}
+            style={{
+              marginLeft: 'auto',
+              background: 'white',
+              border: '1px solid oklch(80% 0.1 25)',
+              color: 'oklch(45% 0.15 25)',
+              padding: '11px 22px',
+              borderRadius: 'var(--radius-control)',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: cancellingRequest ? 'default' : 'pointer',
+              opacity: cancellingRequest ? 0.6 : 1,
+            }}
+          >
+            Cancel request
+          </button>
+        )}
       </div>
     </form>
   );

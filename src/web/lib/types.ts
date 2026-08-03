@@ -27,6 +27,14 @@ export interface RequestDetail {
   endDate: string;
   reason: string;
   state: RequestState;
+  approval: RequestDecision | null;
+}
+
+export interface RequestDecision {
+  responsibleManagerName: string;
+  decision: 'Approved' | 'Rejected';
+  comment: string | null;
+  decidedAtUtc: string;
 }
 
 // The C# contract's fields are all nullable (Guid?/DateOnly?/string?) so the

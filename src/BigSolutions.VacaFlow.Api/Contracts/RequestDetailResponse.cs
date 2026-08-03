@@ -10,4 +10,11 @@ public sealed record RequestDetailResponse(
     DateOnly StartDate,
     DateOnly EndDate,
     string Reason,
-    string State);
+    string State,
+    RequestApprovalResponse? Approval);
+
+public sealed record RequestApprovalResponse(
+    string ResponsibleManagerName,
+    string Decision,
+    string? Comment,
+    DateTime DecidedAtUtc);

@@ -1262,4 +1262,69 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
     }
+
+    /// <summary>AC2-AC4: an approved request's detail carries the decision block.</summary>
+    [Fact]
+    public async Task Get_On_An_Approved_Request_Includes_The_Approval_Block()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        using (var approveResponse = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract("Enjoy")))
+        {
+            approveResponse.EnsureSuccessStatusCode();
+        }
+
+        using var response = await carlosClient.GetAsync($"/api/requests/{id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var detail = await response.Content.ReadFromJsonAsync<RequestDetailResponse>();
+        Assert.NotNull(detail?.Approval);
+        Assert.Equal("Laura Méndez", detail.Approval.ResponsibleManagerName);
+        Assert.Equal("Approved", detail.Approval.Decision);
+        Assert.Equal("Enjoy", detail.Approval.Comment);
+    }
+
+    /// <summary>AC4: a rejection with no comment yields a null Comment, not an empty string.</summary>
+    [Fact]
+    public async Task Get_On_A_Rejected_Request_Without_A_Comment_Has_A_Null_Comment()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        using (var rejectResponse = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null)))
+        {
+            rejectResponse.EnsureSuccessStatusCode();
+        }
+
+        using var response = await carlosClient.GetAsync($"/api/requests/{id}");
+
+        var detail = await response.Content.ReadFromJsonAsync<RequestDetailResponse>();
+        Assert.NotNull(detail?.Approval);
+        Assert.Equal("Rejected", detail.Approval.Decision);
+        Assert.Null(detail.Approval.Comment);
+    }
+
+    /// <summary>AC6: a Submitted request's detail has no decision block.</summary>
+    [Fact]
+    public async Task Get_On_A_Submitted_Request_Has_No_Approval_Block()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        using var response = await carlosClient.GetAsync($"/api/requests/{id}");
+
+        var detail = await response.Content.ReadFromJsonAsync<RequestDetailResponse>();
+        Assert.Null(detail?.Approval);
+    }
 }

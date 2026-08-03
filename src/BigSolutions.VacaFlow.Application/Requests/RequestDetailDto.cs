@@ -11,4 +11,15 @@ public sealed record RequestDetailDto(
     DateOnly StartDate,
     DateOnly EndDate,
     string Reason,
-    string State);
+    string State,
+    RequestApprovalDto? Approval);
+
+/// <summary>
+/// Flat shape matching the FRD.md §6.3 approval? block — the manager's
+/// name, not their id, since no consumer needs the id (US-025).
+/// </summary>
+public sealed record RequestApprovalDto(
+    string ResponsibleManagerName,
+    string Decision,
+    string? Comment,
+    DateTime DecidedAtUtc);
