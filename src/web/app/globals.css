@@ -139,3 +139,45 @@ textarea:focus-visible {
   cursor: default;
   opacity: 0.6;
 }
+
+/* My Requests row action buttons (Backlog.md §3.3, S-04) — outlined
+   neutral, solid primary, and outlined danger, verbatim values from the
+   prototype (lines 164-167). */
+.btn-row-outline {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-input);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-row-primary {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-row-danger {
+  background: var(--color-surface);
+  border: 1px solid var(--color-error-border);
+  color: oklch(45% 0.15 25);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-row-outline:disabled,
+.btn-row-primary:disabled,
+.btn-row-danger:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
