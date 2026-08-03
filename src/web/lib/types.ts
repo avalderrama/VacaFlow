@@ -42,6 +42,17 @@ export interface RequestPayload {
   reason: string | null;
 }
 
+export interface RequestSummary {
+  id: string;
+  absenceType: { id: string; code: string; name: string };
+  startDate: string;
+  endDate: string;
+  reason: string;
+  state: RequestState;
+  employee: { id: string; fullName: string };
+  createdAtUtc: string;
+}
+
 export interface ApiError {
   code: string;
   message: string;
