@@ -104,4 +104,12 @@ export function rejectRequest(id: string, comment: string | null): Promise<void>
   });
 }
 
+export function submitRequest(id: string): Promise<void> {
+  return request<void>(`/requests/${id}/submit`, { method: 'POST' });
+}
+
+export function cancelRequest(id: string): Promise<void> {
+  return request<void>(`/requests/${id}/cancel`, { method: 'POST' });
+}
+
 export { ApplicationError };
