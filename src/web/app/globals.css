@@ -215,3 +215,25 @@ textarea:focus-visible {
   cursor: default;
   opacity: 0.6;
 }
+
+/* Banner fade-in (Backlog.md §3.3, US-031 AC5) — animation, not
+   transition: the banner appears via conditional mount, so there is no
+   prior state to transition from. */
+@keyframes banner-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.banner {
+  animation: banner-fade-in 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+}

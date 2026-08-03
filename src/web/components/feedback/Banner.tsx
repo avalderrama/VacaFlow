@@ -1,15 +1,14 @@
 'use client';
 
-// Minimal form of the banner (Backlog.md §3.3). The full Given/When/Then
-// matrix — clear-on-navigate, 150ms fade — is US-031's to verify; this
-// component is written once, against the spec, so US-031 completes it
-// instead of rewriting it (US-017 plan D4).
+// Complete against the Given/When/Then matrix of Backlog.md §3.3 (US-031):
+// role="status", 150ms fade-in (.banner, globals.css), clear-on-navigate.
+// Clear-on-navigate needs no code here — it holds by construction, since
+// the callers keep this component's message as page-level useState, and
+// the Next.js App Router unmounts the page (and its state) on navigation.
+// Carrying a message across a redirect is a separate concern, handled by
+// lib/session.ts's setPendingNotification/consumePendingNotification.
 interface BannerProps {
   message: string;
-  // 'success' is the only variant this story calls with — 'draft created.'
-  // and 'changes saved.' are both successes. 'error' is unreachable code
-  // today; it exists so a future error-banner caller (US-031) has the
-  // variant ready instead of adding it later.
   variant: 'success' | 'error';
   onDismiss: () => void;
 }
@@ -21,6 +20,7 @@ export function Banner({ message, variant, onDismiss }: BannerProps) {
   return (
     <div
       role="status"
+      className="banner"
       style={{
         display: 'flex',
         alignItems: 'center',
