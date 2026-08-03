@@ -112,4 +112,8 @@ export function cancelRequest(id: string): Promise<void> {
   return request<void>(`/requests/${id}/cancel`, { method: 'POST' });
 }
 
+export function signOut(): Promise<void> {
+  return request<void>('/auth/logout', { method: 'POST' });
+}
+
 export { ApplicationError };
