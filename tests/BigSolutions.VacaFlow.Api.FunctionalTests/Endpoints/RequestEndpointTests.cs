@@ -1105,4 +1105,161 @@ public sealed class RequestEndpointTests(VacaFlowApiFactory factory) : IClassFix
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("VF-REQ-006", body.GetProperty("code").GetString());
     }
+
+    /// <summary>AC1: Carlos (seeded, assigned to Laura) submits; Laura rejects with a comment.</summary>
+    [Fact]
+    public async Task Reject_A_Submitted_Request_From_An_Assigned_Employee_Returns_204()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract("No coverage that week"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.NotNull(persisted);
+        Assert.Equal(RequestState.Rejected, persisted.State);
+        Assert.NotNull(persisted.Approval);
+        Assert.Equal(DecisionType.Rejected, persisted.Approval.Decision);
+        Assert.Equal("No coverage that week", persisted.Approval.Comment);
+        Assert.NotNull(persisted.ClosedAtUtc);
+
+        using var queueResponse = await lauraClient.GetAsync("/api/requests");
+        var queue = await queueResponse.Content.ReadFromJsonAsync<List<RequestSummaryResponse>>();
+        Assert.DoesNotContain(queue!, item => item.Id == id);
+    }
+
+    /// <summary>AC2: the comment is optional for a rejection too.</summary>
+    [Fact]
+    public async Task Reject_A_Submitted_Request_Without_A_Comment_Returns_204()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var persisted = await LoadRequestAsync(id);
+        Assert.Equal(RequestState.Rejected, persisted!.State);
+        Assert.Null(persisted.Approval!.Comment);
+    }
+
+    /// <summary>AC4 (D2 — representative subset): a Draft cannot be rejected.</summary>
+    [Fact]
+    public async Task Reject_A_Draft_Returns_VF_DEC_001()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-001", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC4 (D2 — representative subset): a non-manager caller.</summary>
+    [Fact]
+    public async Task Reject_By_A_Non_Manager_Returns_VF_DEC_002()
+    {
+        var anaClient = factory.CreateClient();
+        await LoginAsAsync(anaClient, "ana@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(anaClient));
+        var id = await CreateAndSubmitDraftAsync(anaClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+
+        using var response = await carlosClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-002", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC4 (D2 — representative subset): a manager rejecting their own request.</summary>
+    [Fact]
+    public async Task Reject_Own_Request_Returns_VF_DEC_004()
+    {
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(lauraClient));
+        var id = await CreateAndSubmitDraftAsync(lauraClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-004", body.GetProperty("code").GetString());
+    }
+
+    /// <summary>AC4 (D2 — the approve/reject cross): a request already approved cannot then be rejected.</summary>
+    [Fact]
+    public async Task Reject_An_Already_Approved_Request_Returns_VF_DEC_005()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        using (var firstApprove = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/approve", new ApproveRequestContract(null)))
+        {
+            firstApprove.EnsureSuccessStatusCode();
+        }
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-DEC-005", body.GetProperty("code").GetString());
+        var persisted = await LoadRequestAsync(id);
+        Assert.Equal(DecisionType.Approved, persisted!.Approval!.Decision);
+    }
+
+    [Fact]
+    public async Task Reject_With_A_Comment_Over_500_Characters_Returns_VF_VAL_001()
+    {
+        var carlosClient = factory.CreateClient();
+        await LoginAsAsync(carlosClient, "employee@vacaflow.test", "Employee123!");
+        var typeId = GetVacationTypeId(await ListAbsenceTypesAsync(carlosClient));
+        var id = await CreateAndSubmitDraftAsync(carlosClient, typeId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1));
+
+        var lauraClient = factory.CreateClient();
+        await LoginAsAsync(lauraClient, "manager@vacaflow.test", "Manager123!");
+        var tooLong = new string('a', 501);
+
+        using var response = await lauraClient.PostAsJsonAsync($"/api/requests/{id}/reject", new RejectRequestContract(tooLong));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-VAL-001", body.GetProperty("code").GetString());
+        Assert.Equal("comment", body.GetProperty("field").GetString());
+    }
+
+    [Fact]
+    public async Task Reject_Without_A_Session_Returns_VF_AUT_004()
+    {
+        using var response = await _client.PostAsJsonAsync($"/api/requests/{Guid.NewGuid()}/reject", new RejectRequestContract(null));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("VF-AUT-004", body.GetProperty("code").GetString());
+    }
 }

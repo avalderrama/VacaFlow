@@ -84,6 +84,47 @@ public sealed class DecideRequestHandlerTests
         Assert.Equal(new ApprovalId(FixedApprovalId), request.Approval.Id);
     }
 
+    /// <summary>AC1: rejecting a Submitted request with a comment transitions to Rejected and the Approval record carries the comment.</summary>
+    [Fact]
+    public async Task Handle_Should_Succeed_When_The_Assigned_Manager_Rejects_A_Submitted_Request_With_A_Comment()
+    {
+        var manager = NewEmployee(EmployeeRole.Manager);
+        var owner = NewEmployee(EmployeeRole.Employee, manager.Id);
+        var request = NewSubmittedRequest(owner.Id);
+        var requests = new FakeRequestRepository(request);
+        var employees = new FakeEmployeeRepository().WithEmployee(owner).WithEmployee(manager);
+        var handler = CreateHandler(requests, employees, manager.Id);
+
+        var result = await handler.Handle(
+            new DecideRequestCommand(request.Id.Value, DecisionType.Rejected, "No coverage that week"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Rejected, request.State);
+        Assert.NotNull(request.Approval);
+        Assert.Equal(DecisionType.Rejected, request.Approval!.Decision);
+        Assert.Equal("No coverage that week", request.Approval.Comment);
+        Assert.Equal(manager.Id, request.Approval.ResponsibleManagerId);
+    }
+
+    /// <summary>AC2: the comment is optional for a rejection too — it succeeds with no comment.</summary>
+    [Fact]
+    public async Task Handle_Should_Succeed_When_The_Assigned_Manager_Rejects_A_Submitted_Request_Without_A_Comment()
+    {
+        var manager = NewEmployee(EmployeeRole.Manager);
+        var owner = NewEmployee(EmployeeRole.Employee, manager.Id);
+        var request = NewSubmittedRequest(owner.Id);
+        var requests = new FakeRequestRepository(request);
+        var employees = new FakeEmployeeRepository().WithEmployee(owner).WithEmployee(manager);
+        var handler = CreateHandler(requests, employees, manager.Id);
+
+        var result = await handler.Handle(
+            new DecideRequestCommand(request.Id.Value, DecisionType.Rejected, null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RequestState.Rejected, request.State);
+        Assert.Null(request.Approval!.Comment);
+    }
+
     [Fact]
     public async Task Handle_Should_Fail_When_The_Request_Does_Not_Exist()
     {

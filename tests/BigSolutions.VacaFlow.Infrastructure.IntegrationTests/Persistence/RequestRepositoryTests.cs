@@ -477,6 +477,67 @@ public sealed class RequestRepositoryTests(SqliteDatabaseFixture fixture) : ICla
         Assert.NotNull(loaded.ClosedAtUtc);
     }
 
+    /// <summary>
+    /// AC3: a rejection's Approval row is structurally identical to an
+    /// approval's — inspected directly against the Approvals table (not
+    /// through the EF-mapped entity, which would only prove the mapping
+    /// round-trips, not that the two real rows share the same shape) so
+    /// that "same columns, differ only in Decision/Comment" is asserted by
+    /// actually comparing the two rows against each other.
+    /// </summary>
+    [Fact]
+    public async Task An_Approval_And_A_Rejection_Should_Populate_The_Same_Approvals_Columns()
+    {
+        var typeId = await GetSeededVacationTypeIdAsync();
+        var manager = await SeedEmployeeAsync(fixture.Services, $"parity-mgr-{Guid.NewGuid():N}@vacaflow.test", managerId: null);
+        var approvedOwner = await SeedEmployeeAsync(fixture.Services, $"parity-owner-a-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var rejectedOwner = await SeedEmployeeAsync(fixture.Services, $"parity-owner-r-{Guid.NewGuid():N}@vacaflow.test", manager.Id);
+        var approvedRequest = await SeedRequestAsync(approvedOwner.Id, typeId, DateTime.UtcNow);
+        var rejectedRequest = await SeedRequestAsync(rejectedOwner.Id, typeId, DateTime.UtcNow);
+        await SubmitAsync(approvedRequest.Id);
+        await SubmitAsync(rejectedRequest.Id);
+
+        await DecideAsync(approvedRequest.Id, manager.Id, DecisionType.Approved, "Enjoy");
+        await DecideAsync(rejectedRequest.Id, manager.Id, DecisionType.Rejected, "No coverage that week");
+
+        var approvedRow = await ReadApprovalRowAsync(approvedRequest.Id);
+        var rejectedRow = await ReadApprovalRowAsync(rejectedRequest.Id);
+
+        // Same columns populated in both rows...
+        Assert.False(string.IsNullOrEmpty(approvedRow.Id));
+        Assert.False(string.IsNullOrEmpty(rejectedRow.Id));
+        Assert.Equal(approvedRow.ResponsibleManagerId, rejectedRow.ResponsibleManagerId);
+        Assert.False(string.IsNullOrEmpty(approvedRow.DecidedAtUtc));
+        Assert.False(string.IsNullOrEmpty(rejectedRow.DecidedAtUtc));
+
+        // ...differing only in Decision and Comment.
+        Assert.NotEqual(approvedRow.Decision, rejectedRow.Decision);
+        Assert.Equal(1, approvedRow.Decision);
+        Assert.Equal(2, rejectedRow.Decision);
+        Assert.Equal("Enjoy", approvedRow.Comment);
+        Assert.Equal("No coverage that week", rejectedRow.Comment);
+    }
+
+    private async Task<(string Id, string ResponsibleManagerId, int Decision, string? Comment, string DecidedAtUtc)> ReadApprovalRowAsync(RequestId requestId)
+    {
+        await using var connection = new SqliteConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id, ResponsibleManagerId, Decision, Comment, DecidedAtUtc FROM Approvals WHERE RequestId = $requestId";
+        command.Parameters.AddWithValue("$requestId", requestId.Value.ToString().ToUpperInvariant());
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var found = await reader.ReadAsync();
+        Assert.True(found);
+
+        return (
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetInt32(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.GetString(4));
+    }
+
     [Fact]
     public async Task A_Second_Row_With_The_Same_RequestId_In_Approvals_Should_Violate_The_Unique_Index()
     {
