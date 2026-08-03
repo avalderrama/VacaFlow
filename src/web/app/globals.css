@@ -181,3 +181,37 @@ textarea:focus-visible {
   cursor: default;
   opacity: 0.6;
 }
+
+/* Application shell (Backlog.md §3.3, S-03) — nav pill and sign-out
+   button, verbatim values from the prototype (lines 108-124). */
+.nav-tab {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: oklch(45% 0.02 260);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.nav-tab-active {
+  background: oklch(93% 0.03 260);
+  color: oklch(35% 0.1 260);
+}
+
+.btn-signout {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-input);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-signout:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
