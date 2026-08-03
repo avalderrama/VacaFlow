@@ -1,6 +1,6 @@
 // The only module that calls fetch (ADR-013). Enforced by
 // .dependency-cruiser.js's only-lib-api-may-fetch rule (SAD.md §9.3).
-import type { AbsenceType, ApiError, AuthenticatedUser, RequestDetail, RequestPayload } from './types';
+import type { AbsenceType, ApiError, AuthenticatedUser, RequestDetail, RequestPayload, RequestSummary } from './types';
 
 class ApplicationError extends Error {
   constructor(public readonly apiError: ApiError) {
@@ -80,6 +80,28 @@ export function updateRequest(id: string, payload: RequestPayload): Promise<void
 
 export function getRequest(id: string): Promise<RequestDetail> {
   return request<RequestDetail>(`/requests/${id}`);
+}
+
+export function getMe(): Promise<AuthenticatedUser> {
+  return request<AuthenticatedUser>('/auth/me');
+}
+
+export function listRequests(): Promise<RequestSummary[]> {
+  return request<RequestSummary[]>('/requests');
+}
+
+export function approveRequest(id: string, comment: string | null): Promise<void> {
+  return request<void>(`/requests/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ comment }),
+  });
+}
+
+export function rejectRequest(id: string, comment: string | null): Promise<void> {
+  return request<void>(`/requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ comment }),
+  });
 }
 
 export { ApplicationError };
