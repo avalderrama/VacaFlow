@@ -129,7 +129,10 @@ internal static class RequestEndpoints
     }
 
     private static RequestDetailResponse ToDetailResponse(RequestDetailDto dto) =>
-        new(dto.Id, dto.AbsenceTypeId, dto.StartDate, dto.EndDate, dto.Reason, dto.State);
+        new(dto.Id, dto.AbsenceTypeId, dto.StartDate, dto.EndDate, dto.Reason, dto.State, ToApprovalResponse(dto.Approval));
+
+    private static RequestApprovalResponse? ToApprovalResponse(RequestApprovalDto? dto) =>
+        dto is null ? null : new RequestApprovalResponse(dto.ResponsibleManagerName, dto.Decision, dto.Comment, dto.DecidedAtUtc);
 
     private static RequestSummaryResponse ToSummaryResponse(RequestSummaryDto dto) => new(
         dto.Id,
