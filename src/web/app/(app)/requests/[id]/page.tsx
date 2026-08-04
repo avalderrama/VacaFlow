@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getRequest, cancelRequest, ApplicationError } from '@/lib/api';
 import { setPendingNotification } from '@/lib/session';
 import { Banner } from '@/components/feedback/Banner';
+import { CancelConfirmationModal } from '@/components/modals/CancelConfirmationModal';
 import { RequestFormHeader } from '@/components/requests/RequestFormHeader';
 import { RequestForm } from '@/components/requests/RequestForm';
 import type { RequestDetail } from '@/lib/types';
@@ -16,6 +17,7 @@ export default function RequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     getRequest(params.id)
@@ -72,8 +74,16 @@ export default function RequestDetailPage() {
       <RequestForm
         mode="edit"
         initial={detail}
-        onCancelRequest={detail.state === 'Submitted' ? handleCancelRequest : undefined}
+        onCancelRequest={detail.state === 'Submitted' ? () => setShowCancelModal(true) : undefined}
         cancellingRequest={cancelling}
+      />
+      <CancelConfirmationModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={() => {
+          void handleCancelRequest().finally(() => setShowCancelModal(false));
+        }}
+        confirming={cancelling}
       />
     </div>
   );
