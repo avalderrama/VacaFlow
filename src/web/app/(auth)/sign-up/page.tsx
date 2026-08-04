@@ -9,6 +9,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { registerAccount, ApplicationError } from '@/lib/api';
+import { AuthCard } from '@/components/auth/AuthCard';
 import { pickFieldError } from '@/lib/apiErrors';
 import { setPendingNotification } from '@/lib/session';
 import type { EmployeeRole } from '@/lib/types';
@@ -65,38 +66,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '420px',
-          background: 'var(--color-surface)',
-          borderRadius: 'var(--radius-card)',
-          boxShadow: 'var(--shadow-auth-card)',
-          padding: '40px',
-        }}
-      >
-        <div
-          style={{
-            fontFamily: 'var(--font-ibm-plex-mono)',
-            fontSize: '22px',
-            fontWeight: 600,
-          }}
-        >
-          VacaFlow
-        </div>
-        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '6px 0 0' }}>
-          Create an account
-        </p>
-
+    <AuthCard maxWidth={420} subtitle="Create an account">
         <form
           onSubmit={handleSubmit}
           style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '28px' }}
@@ -230,7 +200,6 @@ export default function SignUpPage() {
             Sign in
           </Link>
         </p>
-      </div>
-    </div>
+    </AuthCard>
   );
 }
