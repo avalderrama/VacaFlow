@@ -12,6 +12,7 @@ import { Banner } from '@/components/feedback/Banner';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ListSkeleton } from '@/components/feedback/ListSkeleton';
 import { QueueCard } from '@/components/queue/QueueCard';
+import { usePendingQueueCount } from '@/components/shell/PendingQueueCountProvider';
 
 // The manager's own requests travel in the same payload as their team's
 // (US-020 plan D3) — the contract's own doc-comment prescribes this
@@ -28,6 +29,7 @@ export default function QueuePage() {
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);
+  const { refresh: refreshPendingCount } = usePendingQueueCount();
 
   useEffect(() => {
     fetchQueue()
@@ -64,6 +66,10 @@ export default function QueuePage() {
       // path isn't invisible when debugging staleness reports later.
       console.error(`Failed to refresh the queue after a ${action} on ${id}.`);
     }
+    // Updates the header's tab count (US-035 AC3). Never awaited: refresh()
+    // swallows its own errors and never rejects, and the count is
+    // decorative — it must not add latency to re-enabling the buttons.
+    void refreshPendingCount();
     setDeciding(false);
   }
 
