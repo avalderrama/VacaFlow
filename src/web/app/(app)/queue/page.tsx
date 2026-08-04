@@ -1,16 +1,16 @@
 'use client';
 
-// S-07 Approval Queue (US-023). Decisions are sent without a comment
-// (comment: null) — the S-09 modal with the optional comment field is
-// US-034's job; approveRequest/rejectRequest already accept a comment
-// parameter so that story only inserts the modal between the click and
-// the existing call, nothing here changes.
+// S-07 Approval Queue (US-023). Approve/Reject open the S-09 decision
+// modal (US-034) instead of deciding immediately; the modal captures an
+// optional comment and decide() passes it straight through to the
+// already-existing approveRequest/rejectRequest calls.
 import { useEffect, useState } from 'react';
 import { ApplicationError, approveRequest, getMe, listRequests, rejectRequest } from '@/lib/api';
 import type { RequestSummary } from '@/lib/types';
 import { Banner } from '@/components/feedback/Banner';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ListSkeleton } from '@/components/feedback/ListSkeleton';
+import { DecisionModal } from '@/components/modals/DecisionModal';
 import { QueueCard } from '@/components/queue/QueueCard';
 import { usePendingQueueCount } from '@/components/shell/PendingQueueCountProvider';
 
@@ -29,6 +29,9 @@ export default function QueuePage() {
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);
+  const [decisionTarget, setDecisionTarget] = useState<{ id: string; action: 'approve' | 'reject' } | null>(
+    null,
+  );
   const { refresh: refreshPendingCount } = usePendingQueueCount();
 
   useEffect(() => {
@@ -40,20 +43,24 @@ export default function QueuePage() {
       });
   }, []);
 
-  async function decide(id: string, action: 'approve' | 'reject') {
+  // Returns whether the decision actually went through, so the caller can
+  // tell a real success from a caught-and-reported failure — decide()
+  // never rejects (the catch below reports the error itself), so a bare
+  // .then() on its promise would fire on both outcomes alike.
+  async function decide(id: string, action: 'approve' | 'reject', comment: string | null): Promise<boolean> {
     setDeciding(true);
     setError(null);
     setNotification(null);
     try {
       if (action === 'approve') {
-        await approveRequest(id, null);
+        await approveRequest(id, comment);
       } else {
-        await rejectRequest(id, null);
+        await rejectRequest(id, comment);
       }
     } catch (err) {
       setError(err instanceof ApplicationError ? err.apiError.message : 'Something went wrong.');
       setDeciding(false);
-      return;
+      return false;
     }
 
     setNotification(action === 'approve' ? 'Request approved.' : 'Request rejected.');
@@ -71,6 +78,7 @@ export default function QueuePage() {
     // decorative — it must not add latency to re-enabling the buttons.
     void refreshPendingCount();
     setDeciding(false);
+    return true;
   }
 
   return (
@@ -94,12 +102,39 @@ export default function QueuePage() {
               key={request.id}
               request={request}
               disabled={deciding}
-              onApprove={() => decide(request.id, 'approve')}
-              onReject={() => decide(request.id, 'reject')}
+              onApprove={() => setDecisionTarget({ id: request.id, action: 'approve' })}
+              onReject={() => setDecisionTarget({ id: request.id, action: 'reject' })}
             />
           ))}
         </div>
       )}
+      <DecisionModal
+        // Remounts on every new target so the comment textarea's local
+        // state (DecisionModal.tsx) starts empty each time (AC5) — the
+        // page keeps decisionTarget set (not null) until decide() resolves
+        // so `confirming` stays real, which also keeps this key stable
+        // across that async window instead of remounting mid-request.
+        key={decisionTarget ? `${decisionTarget.id}-${decisionTarget.action}` : 'closed'}
+        isOpen={decisionTarget !== null}
+        decision={decisionTarget?.action ?? 'approve'}
+        onClose={() => setDecisionTarget(null)}
+        onConfirm={(comment) => {
+          const target = decisionTarget;
+          if (target) {
+            // Close only on success (AC1's "the decision executes and the
+            // modal closes"). On failure the modal — and the comment the
+            // manager already typed — stays put behind the error banner,
+            // instead of discarding it on a doomed retry.
+            void decide(target.id, target.action, comment).then((succeeded) => {
+              if (succeeded) {
+                setDecisionTarget(null);
+              }
+            });
+          }
+        }}
+        confirming={deciding}
+        error={decisionTarget ? error : null}
+      />
     </div>
   );
 }
