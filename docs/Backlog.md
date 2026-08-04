@@ -50,9 +50,9 @@ Code compiles · the business rule is enforced in the domain or application laye
 
 **The application interface is in English**, as are code identifiers, database values, API contracts, error codes and this documentation set. The product is monolingual; no localization mechanism is built (`FUT-32`).
 
-> **The prototype is in Spanish.** It was produced with Spanish labels throughout — `Mis solicitudes`, `Bandeja de aprobación`, `Iniciar sesión`, and the state badges `Borrador` / `Enviada` / `Aprobada` / `Rechazada` / `Cancelada`. The decision to ship in English came after it was built.
+> **The original prototype was in Spanish.** [`prototype/VacaFlow.dc.html`](prototype/VacaFlow.dc.html) was produced with Spanish labels throughout — `Mis solicitudes`, `Bandeja de aprobación`, `Iniciar sesión`, and the state badges `Borrador` / `Enviada` / `Aprobada` / `Rechazada` / `Cancelada`. The decision to ship in English came after it was built.
 >
-> **Consequence.** Take the prototype as authoritative for *layout, structure, spacing, color and interaction*, and take §3.5 of this document as authoritative for *every string*. The screenshots in `docs/prototype/` will not match the implementation word for word, and that is expected. `US-028` covers re-cutting the prototype in English before it ships as deliverable 2 — see §7.
+> **`US-028` re-cut it in English.** [`prototype/en/VacaFlow.en.html`](prototype/en/VacaFlow.en.html) is the version that ships as deliverable 2, and the screenshots in `docs/prototype/screenshots/` were regenerated from it — they now match §3.5 word for word. Take the prototype as authoritative for *layout, structure, spacing, color and interaction*, and §3.5 of this document as authoritative for *every string*.
 
 One convenient side effect: the state labels shown in the interface now coincide exactly with the values persisted in `Request.State`. The two remain separate concerns — §3.4 is still a presentation table, carrying the badge palette — but no translation sits between them.
 
@@ -97,7 +97,7 @@ Everything in this section is read from the prototype, with the copy rendered in
 | `S-08` | Cancel confirmation modal | [`08-cancel-confirm-modal.png`](prototype/screenshots/08-cancel-confirm-modal.png) | `US-033` |
 | `S-09` | Decision modal | [`11-approve-decision-modal.png`](prototype/screenshots/11-approve-decision-modal.png) | `US-034` |
 
-The exact markup, inline styles and client logic are in [`prototype/VacaFlow.dc.html`](prototype/VacaFlow.dc.html). Where this document and the prototype markup disagree: the markup wins for visual detail, this document wins for business behavior, and §3.5 always wins for copy.
+The exact markup, inline styles and client logic are in [`prototype/en/VacaFlow.en.html`](prototype/en/VacaFlow.en.html) — one file, no framework and no build step, opens straight from the file system. Its only external reference is the Google Fonts link inherited from the original; offline it falls back to the system font stack and everything else still works. The Spanish [`prototype/VacaFlow.dc.html`](prototype/VacaFlow.dc.html) is kept as the historical design source; it cannot be opened, because it loads a `support.js` runtime that is not in this repository (`US-028`). Where this document and the prototype markup disagree: the markup wins for visual detail, this document wins for business behavior, and §3.5 always wins for copy.
 
 ### 3.3 Component patterns
 
