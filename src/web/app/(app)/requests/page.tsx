@@ -1,8 +1,7 @@
 'use client';
 
-// S-04 My Requests (US-024). Cancel calls cancelRequest(id) directly, no
-// confirmation — the S-08 modal is US-033's job; it will insert itself
-// between the click and this existing call, nothing here changes.
+// S-04 My Requests (US-024). Cancel opens the S-08 confirmation modal
+// (US-033) before calling cancelRequest(id) — the call itself is unchanged.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -16,6 +15,7 @@ import type { RequestSummary } from '@/lib/types';
 import { Banner } from '@/components/feedback/Banner';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ListSkeleton } from '@/components/feedback/ListSkeleton';
+import { CancelConfirmationModal } from '@/components/modals/CancelConfirmationModal';
 import { RequestRow } from '@/components/requests/RequestRow';
 import { consumePendingNotification } from '@/lib/session';
 
@@ -41,6 +41,7 @@ export default function RequestsPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyRequests()
@@ -119,11 +120,22 @@ export default function RequestsPage() {
               onEdit={() => router.push(`/requests/${request.id}`)}
               onView={() => router.push(`/requests/${request.id}`)}
               onSubmit={() => act(request.id, 'submit')}
-              onCancel={() => act(request.id, 'cancel')}
+              onCancel={() => setCancelTargetId(request.id)}
             />
           ))}
         </div>
       )}
+      <CancelConfirmationModal
+        isOpen={cancelTargetId !== null}
+        onClose={() => setCancelTargetId(null)}
+        onConfirm={() => {
+          const id = cancelTargetId;
+          if (id) {
+            void act(id, 'cancel').then(() => setCancelTargetId(null));
+          }
+        }}
+        confirming={acting}
+      />
     </div>
   );
 }
