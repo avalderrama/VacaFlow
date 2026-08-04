@@ -52,6 +52,24 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Skip link (Backlog.md §3.1, US-036 AC1) — offscreen via `top`, not
+   display/visibility, so it stays keyboard-focusable as the very first
+   Tab stop and only becomes visible once it receives focus. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
 /* Shared form control classes — one definition instead of a style object
    repeated per field (RequestForm.tsx, sign-in/page.tsx). */
 .field-label {
