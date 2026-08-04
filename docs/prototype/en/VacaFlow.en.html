@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VacaFlow — Functional prototype</title>
+<!--
+  VacaFlow functional prototype (US-028).
+
+  English re-cut of docs/prototype/VacaFlow.dc.html. Layout, spacing, palette
+  and interactions are carried over unchanged; every visible string comes from
+  the Backlog.md §3.5 microcopy catalog, which is authoritative for copy.
+
+  Self-contained by design: no framework, no build step, no server. Open the
+  file directly in a browser. The Spanish original depended on a runtime
+  (support.js) that is not in the repository, so the x-dc template layer was
+  replaced with plain DOM rendering — a change of implementation only.
+
+  The one external reference is the Google Fonts link below, carried over
+  from the original. Offline it simply fails and the font stack falls back to
+  system-ui; everything else still works.
+
+  State lives in localStorage under vacaflow_db_en_v1. Clearing site data
+  resets the prototype to its seeded state.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:oklch(98% 0.004 250);font-family:'IBM Plex Sans',system-ui,sans-serif;color:oklch(22% 0.02 260)}
+  a{color:oklch(52% 0.15 260);text-decoration:none}
+  a:hover{color:oklch(46% 0.15 260);text-decoration:underline}
+  :focus-visible{outline:2px solid oklch(52% 0.15 260);outline-offset:2px}
+  ::placeholder{color:oklch(62% 0.01 260)}
+  @keyframes vfFade{from{opacity:0}to{opacity:1}}
+  .vf-skip{position:fixed;left:-9999px;top:0;background:white;color:oklch(22% 0.02 260);padding:12px 18px;z-index:200;border-radius:0 0 8px 0;font-size:14px;font-weight:600}
+  .vf-skip:focus{left:0}
+</style>
+</head>
+<body>
+<a class="vf-skip" href="#main-content" id="skip-link"></a>
+<div id="root"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DB_KEY = 'vacaflow_db_en_v1';
+  var SESSION_KEY = 'vacaflow_session_en';
+
+  // ---------------------------------------------------------------------
+  // Microcopy — Backlog.md §3.5. This table, not the markup, is
+  // authoritative for copy. Grouped the same way the catalog is.
+  // ---------------------------------------------------------------------
+  var COPY = {
+    wordmark: 'VacaFlow',
+    signInSubtitle: 'Absence request management',
+    createAccountSubtitle: 'Create an account',
+    navRequests: 'My Requests',
+    navQueue: 'Approval Queue',
+    signOut: 'Sign out',
+    skipLink: 'Skip to main content',
+    dismissNotification: 'Dismiss notification',
+    backToMyRequests: 'Back to my requests',
+    roleEmployee: 'Employee',
+    roleManager: 'Manager',
+
+    labelEmail: 'Email',
+    labelPassword: 'Password',
+    passwordHelper: 'Minimum 8 characters.',
+    labelFullName: 'Full name',
+    labelRole: 'Role (for demo purposes)',
+    labelAbsenceType: 'Absence type',
+    absenceTypePlaceholder: 'Select…',
+    labelStartDate: 'Start date',
+    labelEndDate: 'End date',
+    labelReason: 'Reason',
+    labelDecisionComment: 'Comment (optional)',
+
+    btnSignIn: 'Sign in',
+    btnCreateAccount: 'Create account',
+    btnNewRequest: 'New request',
+    btnCreateRequest: 'Create request',
+    btnSaveDraft: 'Save draft',
+    btnSaveChanges: 'Save changes',
+    btnCancel: 'Cancel',
+    btnBack: 'Back',
+    btnEdit: 'Edit',
+    btnSubmit: 'Submit',
+    btnView: 'View',
+    btnCancelRequest: 'Cancel request',
+    btnApprove: 'Approve',
+    btnReject: 'Reject',
+    btnYesCancel: 'Yes, cancel',
+
+    linkNoAccount: "Don't have an account? ",
+    linkSignUp: 'Sign up',
+    linkHaveAccount: 'Already have an account? ',
+    linkSignIn: 'Sign in',
+
+    bannerAccountCreated: 'Account created. Welcome to VacaFlow!',
+    bannerSignedIn: function (name) { return 'Signed in as ' + name + '.'; },
+    bannerDraftCreated: 'Draft created.',
+    bannerChangesSaved: 'Changes saved.',
+    bannerSubmitted: 'Request submitted for approval.',
+    bannerCancelled: 'Request cancelled.',
+    bannerApproved: 'Request approved.',
+    bannerRejected: 'Request rejected.',
+
+    // FRD.md §7 error catalog, reproduced verbatim in Backlog.md §3.5.
+    VF_AUT_001: 'An account with this email already exists.',
+    VF_AUT_002: 'The email or password is incorrect.',
+    VF_AUT_003: 'This account is not active.',
+    // Carried for catalog completeness. The prototype has no unauthenticated
+    // action surface — signing out returns to the auth card, so nothing can
+    // be attempted without a session — but leaving the code out would make
+    // the §3.5 error table look 15/16 covered rather than deliberately so.
+    VF_AUT_004: 'You must be signed in to perform this action.',
+    VF_CAT_001: 'The selected absence type does not exist or is not available.',
+    VF_REQ_001: 'The end date cannot be earlier than the start date.',
+    VF_REQ_002: 'The start date cannot be in the past.',
+    VF_REQ_003: 'Only Draft requests can be edited.',
+    VF_REQ_004: 'You can only act on your own requests.',
+    VF_REQ_005: function (current, target) {
+      return 'This request cannot move from ' + current + ' to ' + target + '.';
+    },
+    VF_REQ_006: 'The request was not found.',
+    VF_DEC_001: 'Only Submitted requests can be approved or rejected.',
+    VF_DEC_002: 'Only a manager can approve or reject a request.',
+    VF_DEC_003: 'You are not the manager assigned to this employee.',
+    VF_DEC_004: 'You cannot decide on your own request.',
+    VF_DEC_005: 'This request already has a final decision.',
+
+    valFullName: 'Full name is required (max 120 characters).',
+    valEmail: 'Enter a valid email address, for example name@company.com',
+    valPassword: 'The password must be at least 8 characters.',
+    valStartDate: 'The start date is required.',
+    valEndDate: 'The end date is required.',
+    valReason: 'The reason is required (1 to 500 characters).',
+
+    emptyRequestsTitle: "You haven't created any requests yet",
+    emptyRequestsBody: 'Create your first absence request to get started.',
+    emptyQueueTitle: 'No pending requests',
+    emptyQueueBody: 'When an employee assigned to you submits a request, it will appear here.',
+
+    modalCancelTitle: 'Cancel this request?',
+    modalCancelBody: 'This action cannot be undone. The request will move to the Cancelled state.',
+    modalApproveTitle: 'Approve this request?',
+    modalRejectTitle: 'Reject this request?',
+
+    decisionHeading: 'DECISION',
+    decisionBy: function (name, when) { return 'By ' + name + ' · ' + when; },
+
+    testAccountsHeading: 'TEST ACCOUNTS (NON-PRODUCTION)',
+
+    // Prototype-only. See bannerFor().
+    notPersisted: 'Saved for this session only — this browser is blocking storage, so the change will be lost on reload.',
+    dataReset: 'Stored prototype data could not be read and was reset to the seeded state.',
+    renderFailedTitle: 'The prototype could not render this screen.',
+    renderFailedBody: 'Its stored data is in an unexpected shape. Clear this browser site data to reset it to the seeded state.',
+
+    formTitleNew: 'New request',
+    formTitleEdit: 'Edit draft',
+    formTitleDetail: 'Request detail',
+    titleMyRequests: 'My Requests',
+    titleApprovalQueue: 'Approval Queue',
+  };
+
+  // State badge labels and colors — Backlog.md §3.4. Draft and Cancelled
+  // deliberately share a background; label and available actions distinguish
+  // them, never color alone (NFR-USA-007).
+  var STATE_META = {
+    Draft:     { label: 'Draft',     bg: 'oklch(93% 0.01 260)', fg: 'oklch(35% 0.02 260)' },
+    Submitted: { label: 'Submitted', bg: 'oklch(90% 0.09 80)',  fg: 'oklch(38% 0.12 70)' },
+    Approved:  { label: 'Approved',  bg: 'oklch(90% 0.09 150)', fg: 'oklch(33% 0.12 150)' },
+    Rejected:  { label: 'Rejected',  bg: 'oklch(91% 0.09 25)',  fg: 'oklch(40% 0.15 25)' },
+    Cancelled: { label: 'Cancelled', bg: 'oklch(93% 0.01 260)', fg: 'oklch(45% 0.01 260)' },
+  };
+
+  // One row carrying an unrecognised state must not take the page down with
+  // it — the badge degrades to showing the raw value instead.
+  function stateMeta(value) {
+    return STATE_META[value] || { label: String(value), bg: 'oklch(93% 0.01 260)', fg: 'oklch(35% 0.02 260)' };
+  }
+
+  var S = {
+    input: 'width:100%;padding:10px 12px;border:1px solid oklch(85% 0.008 260);border-radius:8px;font-size:15px;font-family:inherit',
+    label: 'display:block;font-size:13px;font-weight:600;margin-bottom:6px',
+    primaryBtn: 'background:oklch(52% 0.15 260);color:white;border:none;padding:11px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer',
+    fieldError: 'color:oklch(50% 0.18 25);font-size:13px;margin:6px 0 0',
+    alertBox: 'background:oklch(95% 0.03 25);border:1px solid oklch(80% 0.1 25);color:oklch(35% 0.15 25);font-size:14px;padding:10px 14px;border-radius:8px;margin-bottom:20px',
+    card: 'background:white;border:1px solid oklch(90% 0.006 250);border-radius:12px',
+    // List and queue cards use a 10px radius; only the panel-sized cards use 12px.
+    rowCard: 'background:white;border:1px solid oklch(90% 0.006 250);border-radius:10px',
+    outlineBtn: 'background:white;border:1px solid oklch(85% 0.008 260);padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+    dangerOutlineBtn: 'background:white;border:1px solid oklch(80% 0.1 25);color:oklch(45% 0.15 25);padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+    rowBtn: 'padding:8px 14px;border-radius:7px;border:1px solid oklch(85% 0.008 260);background:white;font-size:13px;font-weight:600;cursor:pointer',
+    rowPrimaryBtn: 'padding:8px 14px;border-radius:7px;border:none;background:oklch(52% 0.15 260);color:white;font-size:13px;font-weight:600;cursor:pointer',
+    rowDangerBtn: 'padding:8px 14px;border-radius:7px;border:1px solid oklch(80% 0.1 25);background:white;color:oklch(45% 0.15 25);font-size:13px;font-weight:600;cursor:pointer',
+    navActive: 'padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;background:oklch(93% 0.03 260);color:oklch(35% 0.1 260)',
+    navInactive: 'padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;background:transparent;color:oklch(45% 0.02 260)',
+    emptyState: 'text-align:center;padding:64px 24px;background:white;border:1px dashed oklch(85% 0.008 260);border-radius:12px',
+    skeletonBlock: 'border-radius:10px;background:oklch(94% 0.004 250)',
+    modalOverlay: 'position:fixed;inset:0;background:oklch(0% 0 0 / 0.4);display:flex;align-items:center;justify-content:center;z-index:50;animation:vfFade .15s ease-out',
+    modalPanel: 'background:white;border-radius:12px;padding:28px',
+  };
+
+  var state = {
+    view: 'login',
+    sessionId: null,
+    loginFields: { email: '', password: '' },
+    loginError: null,
+    registerFields: { fullName: '', email: '', password: '', role: 'Employee' },
+    registerErrors: {},
+    formMode: 'create',
+    formRequestId: null,
+    formFields: { absenceTypeId: '', startDate: '', endDate: '', reason: '' },
+    formErrors: {},
+    saving: false,
+    listLoading: false,
+    banner: null,
+    cancelConfirmId: null,
+    decisionModal: null,
+    navTab: 'requests',
+  };
+
+  // --- storage -----------------------------------------------------------
+
+  // UNREADABLE is distinct from null: a garbled blob is the likeliest real
+  // corruption, and it must still reach the reviewer as a notice rather than
+  // silently reseeding as if nothing had been stored.
+  var UNREADABLE = {};
+
+  function readDb() {
+    var raw = null;
+    try { raw = localStorage.getItem(DB_KEY); }
+    catch (err) { console.error('Could not read the prototype database:', err); return UNREADABLE; }
+    if (raw === null) { return null; }
+    try { return JSON.parse(raw) || UNREADABLE; }
+    catch (err) { console.error('Stored prototype data is not valid JSON:', err); return UNREADABLE; }
+  }
+
+  // Returns whether the write landed. Callers must not report success on a
+  // false: private browsing, storage-blocked origins and quota exhaustion all
+  // throw here, and telling a reviewer "Request approved." for a change that
+  // will vanish on reload is worse than telling them storage is unavailable.
+  function saveDb(db) {
+    try {
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      return true;
+    } catch (err) {
+      console.error('Could not persist the prototype database:', err);
+      return false;
+    }
+  }
+
+  // Wraps a success banner so it degrades to an honest warning when the write
+  // did not land. Not a §3.5 string — the catalog describes the real product,
+  // which persists server-side and has no equivalent failure.
+  function bannerFor(persisted, successMessage) {
+    return persisted
+      ? { type: 'success', message: successMessage }
+      : { type: 'error', message: COPY.notPersisted };
+  }
+
+  var db = null;
+
+  function saveSession(employeeId) {
+    try { localStorage.setItem(SESSION_KEY, employeeId); return true; }
+    catch (err) { console.error('Could not persist the session:', err); return false; }
+  }
+
+  function genId() { return 'id-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+  function nowIso() { return new Date().toISOString(); }
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  // NOT a hash. Reversible base64, so the prototype can compare a typed
+  // password without pulling in crypto. The real system uses PBKDF2; nothing
+  // here is a security control, which is why the seed field is named
+  // passwordToken rather than passwordHash.
+  function fakeHash(pw) { return btoa(unescape(encodeURIComponent('vf::' + pw))); }
+  function isValidEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
+
+  // A stored value is only reusable if every collection the renderer walks is
+  // present. A truncated write or a blob left by an older schema would
+  // otherwise pass a shallow check and then crash mid-render, and because
+  // render() clears the root first, the reviewer would be looking at a blank
+  // page with no way back short of clearing site data.
+  var REQUIRED_COLLECTIONS = ['employees', 'accounts', 'absenceTypes', 'requests', 'approvals'];
+
+  function isUsable(candidate) {
+    if (!candidate || candidate === UNREADABLE) { return false; }
+    return REQUIRED_COLLECTIONS.every(function (key) { return Array.isArray(candidate[key]); });
+  }
+
+  var seedNotice = null;
+
+  function seed() {
+    var existing = readDb();
+    if (isUsable(existing) && existing.employees.length) { db = existing; return; }
+    if (existing) {
+      console.error('Stored prototype data was unusable; reseeding.');
+      seedNotice = { type: 'error', message: COPY.dataReset };
+    }
+
+    var managerId = genId(), emp1Id = genId(), emp2Id = genId();
+    var typeVac = genId(), typePers = genId(), typeSick = genId();
+    var today = new Date();
+    var plus = function (days) {
+      var d = new Date(today);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+
+    db = {
+      // Personal names stay as they are — they are domain data, not
+      // interface copy. Absence type names are translated, matching what
+      // Backlog.md §3.6 specifies for the real backend seed.
+      employees: [
+        { id: managerId, fullName: 'Laura Méndez', email: 'manager@vacaflow.test', role: 'Manager', isActive: true, managerId: null },
+        { id: emp1Id, fullName: 'Carlos Ruiz', email: 'employee@vacaflow.test', role: 'Employee', isActive: true, managerId: managerId },
+        { id: emp2Id, fullName: 'Ana Torres', email: 'ana@vacaflow.test', role: 'Employee', isActive: true, managerId: managerId },
+      ],
+      accounts: [
+        { id: genId(), employeeId: managerId, passwordToken: fakeHash('Manager123!') },
+        { id: genId(), employeeId: emp1Id, passwordToken: fakeHash('Employee123!') },
+        { id: genId(), employeeId: emp2Id, passwordToken: fakeHash('Employee123!') },
+      ],
+      absenceTypes: [
+        { id: typeVac, code: 'VACATION', name: 'Vacation', isActive: true },
+        { id: typePers, code: 'PERSONAL_LEAVE', name: 'Personal Leave', isActive: true },
+        { id: typeSick, code: 'SICK_LEAVE', name: 'Sick Leave', isActive: true },
+      ],
+      requests: [],
+      approvals: [],
+    };
+
+    var mkReq = function (employeeId, absenceTypeId, startDate, endDate, reason, reqState) {
+      var createdAt = nowIso();
+      var isClosed = reqState === 'Approved' || reqState === 'Rejected' || reqState === 'Cancelled';
+      return {
+        id: genId(), employeeId: employeeId, absenceTypeId: absenceTypeId,
+        startDate: startDate, endDate: endDate, reason: reason, state: reqState,
+        createdAtUtc: createdAt, updatedAtUtc: createdAt,
+        submittedAtUtc: reqState !== 'Draft' ? createdAt : null,
+        closedAtUtc: isClosed ? createdAt : null,
+      };
+    };
+
+    var rDraft = mkReq(emp1Id, typeVac, plus(10), plus(14), 'Year-end family trip', 'Draft');
+    var rSubmitted = mkReq(emp1Id, typePers, plus(3), plus(3), 'Personal errand at the bank', 'Submitted');
+    var rApproved = mkReq(emp1Id, typeVac, plus(-20), plus(-15), 'Summer holiday', 'Approved');
+    var rRejected = mkReq(emp2Id, typeSick, plus(-5), plus(-3), 'Medical rest', 'Rejected');
+    db.requests.push(rDraft, rSubmitted, rApproved, rRejected);
+    db.approvals.push(
+      { id: genId(), requestId: rApproved.id, responsibleManagerId: managerId, decision: 'Approved', comment: 'Enjoy your holiday.', decidedAtUtc: rApproved.createdAtUtc },
+      { id: genId(), requestId: rRejected.id, responsibleManagerId: managerId, decision: 'Rejected', comment: 'A medical certificate must be attached.', decidedAtUtc: rRejected.createdAtUtc }
+    );
+    saveDb(db);
+  }
+
+  function getEmployee(id) {
+    for (var i = 0; i < db.employees.length; i++) {
+      if (db.employees[i].id === id) { return db.employees[i]; }
+    }
+    return null;
+  }
+
+  function currentUser() { return state.sessionId ? getEmployee(state.sessionId) : null; }
+
+  // Every mutating action needs a signed-in caller. The auth card is the only
+  // view rendered without one, so this should be unreachable — but a dead
+  // button with an uncaught throw behind it is a worse answer than the
+  // catalog's own VF-AUT-004.
+  function requireUser() {
+    var me = currentUser();
+    if (!me) { setState({ banner: { type: 'error', message: COPY.VF_AUT_004 } }); return null; }
+    return me;
+  }
+
+  function absenceTypeName(id) {
+    for (var i = 0; i < db.absenceTypes.length; i++) {
+      if (db.absenceTypes[i].id === id) { return db.absenceTypes[i].name; }
+    }
+    return '—';
+  }
+
+  function findRequest(id) {
+    for (var i = 0; i < db.requests.length; i++) {
+      if (db.requests[i].id === id) { return db.requests[i]; }
+    }
+    return null;
+  }
+
+  // --- DOM helpers -------------------------------------------------------
+  // Everything is built with createElement and textContent. No innerHTML
+  // anywhere, so a reason or a name containing markup renders as text.
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (key) {
+        var value = attrs[key];
+        if (value === null || value === undefined || value === false) { return; }
+        if (key === 'text') { node.textContent = value; }
+        else if (key === 'style') { node.setAttribute('style', value); }
+        else if (key.indexOf('on') === 0) {
+          // Refuse a string here rather than letting it fall through to
+          // setAttribute, which would turn it into a live inline handler.
+          if (typeof value !== 'function') {
+            throw new Error('el(): ' + key + ' must be a function, got ' + typeof value);
+          }
+          node.addEventListener(key.slice(2).toLowerCase(), value);
+        } else if (value === true) { node.setAttribute(key, ''); }
+        else { node.setAttribute(key, value); }
+      });
+    }
+    (children || []).forEach(function (child) {
+      if (child === null || child === undefined || child === false) { return; }
+      node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+    });
+    return node;
+  }
+
+  function field(id, labelText, inputNode, errorText, helperText) {
+    return el('div', null, [
+      el('label', { for: id, style: S.label, text: labelText }),
+      inputNode,
+      helperText ? el('p', { style: 'font-size:12px;color:oklch(55% 0.02 260);margin:6px 0 0', text: helperText }) : null,
+      errorText ? el('p', { role: 'alert', style: S.fieldError, text: errorText }) : null,
+    ]);
+  }
+
+  function setState(patch) {
+    Object.keys(patch).forEach(function (key) { state[key] = patch[key]; });
+    render();
+  }
+
+  function reloadList() {
+    setState({ listLoading: true });
+    setTimeout(function () { setState({ listLoading: false }); }, 280);
+  }
+
+  // --- actions -----------------------------------------------------------
+
+  function doRegister() {
+    var f = state.registerFields;
+    var errors = {};
+    if (!f.fullName || f.fullName.trim().length < 1 || f.fullName.length > 120) { errors.fullName = COPY.valFullName; }
+    if (!f.email || !isValidEmail(f.email) || f.email.length > 200) { errors.email = COPY.valEmail; }
+    if (!f.password || f.password.length < 8) { errors.password = COPY.valPassword; }
+    if (!errors.email) {
+      var taken = db.employees.some(function (e) { return e.email.toLowerCase() === f.email.toLowerCase(); });
+      if (taken) { errors.email = COPY.VF_AUT_001; }
+    }
+    if (Object.keys(errors).length) { setState({ registerErrors: errors }); return; }
+
+    setState({ saving: true });
+    setTimeout(function () {
+      var firstManager = db.employees.filter(function (e) { return e.role === 'Manager'; })[0];
+      var id = genId();
+      db.employees.push({
+        id: id, fullName: f.fullName.trim(), email: f.email.trim(), role: f.role, isActive: true,
+        managerId: f.role === 'Employee' ? (firstManager ? firstManager.id : null) : null,
+      });
+      db.accounts.push({ id: genId(), employeeId: id, passwordToken: fakeHash(f.password) });
+      var persisted = saveDb(db) && saveSession(id);
+      setState({
+        saving: false, sessionId: id, view: 'requests', navTab: 'requests',
+        banner: bannerFor(persisted, COPY.bannerAccountCreated),
+        registerFields: { fullName: '', email: '', password: '', role: 'Employee' }, registerErrors: {},
+      });
+    }, 300);
+  }
+
+  function doLogin() {
+    var f = state.loginFields;
+    var employee = db.employees.filter(function (e) {
+      return e.email.toLowerCase() === f.email.trim().toLowerCase();
+    })[0] || null;
+    var account = employee ? db.accounts.filter(function (a) { return a.employeeId === employee.id; })[0] : null;
+
+    if (!employee || !account || account.passwordToken !== fakeHash(f.password)) {
+      setState({ loginError: COPY.VF_AUT_002, loginFields: { email: f.email, password: '' } });
+      return;
+    }
+    if (!employee.isActive) {
+      setState({ loginError: COPY.VF_AUT_003, loginFields: { email: f.email, password: '' } });
+      return;
+    }
+    setState({
+      sessionId: employee.id, view: 'requests', navTab: 'requests', loginError: null,
+      loginFields: { email: '', password: '' },
+      banner: bannerFor(saveSession(employee.id), COPY.bannerSignedIn(employee.fullName)),
+    });
+  }
+
+  function doLogout() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (err) { console.error('Could not clear the session:', err); }
+    setState({ sessionId: null, view: 'login', banner: null, navTab: 'requests' });
+  }
+
+  function validateRequestFields(f) {
+    var errors = {};
+    var type = db.absenceTypes.filter(function (t) { return t.id === f.absenceTypeId && t.isActive; })[0];
+    if (!type) { errors.absenceTypeId = COPY.VF_CAT_001; }
+    if (!f.startDate) { errors.startDate = COPY.valStartDate; }
+    if (!f.endDate) { errors.endDate = COPY.valEndDate; }
+    if (!errors.startDate && !errors.endDate && f.endDate < f.startDate) { errors.endDate = COPY.VF_REQ_001; }
+    if (!errors.startDate && f.startDate < todayStr()) { errors.startDate = COPY.VF_REQ_002; }
+    if (!f.reason || f.reason.trim().length < 1 || f.reason.length > 500) { errors.reason = COPY.valReason; }
+    return errors;
+  }
+
+  function saveForm() {
+    var f = state.formFields;
+    var errors = validateRequestFields(f);
+    if (Object.keys(errors).length) { setState({ formErrors: errors }); return; }
+
+    setState({ saving: true });
+    setTimeout(function () {
+      var me = requireUser();
+      if (!me) { setState({ saving: false }); return; }
+      if (state.formMode === 'create') {
+        var now = nowIso();
+        db.requests.push({
+          id: genId(), employeeId: me.id, absenceTypeId: f.absenceTypeId,
+          startDate: f.startDate, endDate: f.endDate, reason: f.reason.trim(), state: 'Draft',
+          createdAtUtc: now, updatedAtUtc: now, submittedAtUtc: null, closedAtUtc: null,
+        });
+        setState({ saving: false, view: 'requests', banner: bannerFor(saveDb(db), COPY.bannerDraftCreated) });
+      } else {
+        var r = findRequest(state.formRequestId);
+        if (!r || r.employeeId !== me.id) {
+          setState({ saving: false, formErrors: { general: COPY.VF_REQ_004 } });
+          return;
+        }
+        if (r.state !== 'Draft') {
+          setState({ saving: false, formErrors: { general: COPY.VF_REQ_003 } });
+          return;
+        }
+        r.absenceTypeId = f.absenceTypeId; r.startDate = f.startDate; r.endDate = f.endDate;
+        r.reason = f.reason.trim(); r.updatedAtUtc = nowIso();
+        setState({ saving: false, view: 'requests', banner: bannerFor(saveDb(db), COPY.bannerChangesSaved) });
+      }
+      reloadList();
+    }, 300);
+  }
+
+  function submitRequest(id) {
+    var me = requireUser();
+    if (!me) { return; }
+    var r = findRequest(id);
+    if (!r || r.employeeId !== me.id) { setState({ banner: { type: 'error', message: COPY.VF_REQ_004 } }); return; }
+    if (r.state !== 'Draft') {
+      setState({ banner: { type: 'error', message: COPY.VF_REQ_005(r.state, 'Submitted') } });
+      return;
+    }
+    if (r.startDate < todayStr()) { setState({ banner: { type: 'error', message: COPY.VF_REQ_002 } }); return; }
+    r.state = 'Submitted'; r.submittedAtUtc = nowIso(); r.updatedAtUtc = nowIso();
+    setState({ banner: bannerFor(saveDb(db), COPY.bannerSubmitted) });
+    reloadList();
+  }
+
+  function confirmCancel() {
+    var id = state.cancelConfirmId;
+    var me = requireUser();
+    if (!me) { setState({ cancelConfirmId: null }); return; }
+    var r = findRequest(id);
+    if (!r || r.employeeId !== me.id) {
+      setState({ cancelConfirmId: null, banner: { type: 'error', message: COPY.VF_REQ_004 } });
+      return;
+    }
+    if (r.state !== 'Draft' && r.state !== 'Submitted') {
+      setState({ cancelConfirmId: null, banner: { type: 'error', message: COPY.VF_REQ_005(r.state, 'Cancelled') } });
+      return;
+    }
+    r.state = 'Cancelled'; r.closedAtUtc = nowIso(); r.updatedAtUtc = nowIso();
+    setState({ cancelConfirmId: null, banner: bannerFor(saveDb(db), COPY.bannerCancelled) });
+    reloadList();
+  }
+
+  function confirmDecision() {
+    var modal = state.decisionModal;
+    var me = requireUser();
+    if (!me) { setState({ decisionModal: null }); return; }
+    var r = findRequest(modal.id);
+    if (!r) { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_REQ_006 } }); return; }
+    if (r.state !== 'Submitted') { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_DEC_001 } }); return; }
+    if (me.role !== 'Manager') { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_DEC_002 } }); return; }
+    var owner = getEmployee(r.employeeId);
+    if (!owner || owner.managerId !== me.id) { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_DEC_003 } }); return; }
+    if (r.employeeId === me.id) { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_DEC_004 } }); return; }
+    var decided = db.approvals.some(function (a) { return a.requestId === r.id; });
+    if (decided) { setState({ decisionModal: null, banner: { type: 'error', message: COPY.VF_DEC_005 } }); return; }
+
+    var decision = modal.action === 'approve' ? 'Approved' : 'Rejected';
+    var comment = modal.comment && modal.comment.trim() ? modal.comment.trim() : null;
+    db.approvals.push({
+      id: genId(), requestId: r.id, responsibleManagerId: me.id,
+      decision: decision, comment: comment, decidedAtUtc: nowIso(),
+    });
+    r.state = decision; r.closedAtUtc = nowIso(); r.updatedAtUtc = nowIso();
+    setState({
+      decisionModal: null,
+      banner: bannerFor(saveDb(db), decision === 'Approved' ? COPY.bannerApproved : COPY.bannerRejected),
+    });
+    reloadList();
+  }
+
+  // --- views -------------------------------------------------------------
+
+  function authCard(maxWidth, subtitle, children) {
+    return el('div', { style: 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px' }, [
+      el('div', { style: 'width:100%;max-width:' + maxWidth + 'px;' + S.card + ';padding:40px;box-shadow:0 1px 3px oklch(0% 0 0 / 0.06)' },
+        [
+          el('div', { style: "font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:22px;margin-bottom:4px", text: COPY.wordmark }),
+          el('h1', { style: 'font-size:14px;font-weight:400;color:oklch(50% 0.02 260);margin:0 0 28px', text: subtitle }),
+        ].concat(children)),
+    ]);
+  }
+
+  function renderLogin() {
+    var form = el('form', {
+      style: 'display:flex;flex-direction:column;gap:16px',
+      onsubmit: function (ev) { ev.preventDefault(); doLogin(); },
+    }, [
+      field('login-email', COPY.labelEmail, el('input', {
+        id: 'login-email', type: 'email', required: true, autocomplete: 'email',
+        value: state.loginFields.email, style: S.input,
+        oninput: function (ev) { state.loginFields.email = ev.target.value; },
+      })),
+      field('login-password', COPY.labelPassword, el('input', {
+        id: 'login-password', type: 'password', required: true, autocomplete: 'current-password',
+        value: state.loginFields.password, style: S.input,
+        oninput: function (ev) { state.loginFields.password = ev.target.value; },
+      })),
+      el('button', { type: 'submit', style: 'margin-top:8px;' + S.primaryBtn, text: COPY.btnSignIn }),
+    ]);
+
+    return authCard(400, COPY.signInSubtitle, [
+      state.loginError ? el('div', { role: 'alert', style: S.alertBox, text: state.loginError }) : null,
+      form,
+      el('div', { style: 'margin-top:20px;font-size:14px;color:oklch(50% 0.02 260)' }, [
+        COPY.linkNoAccount,
+        el('a', {
+          href: '#', style: 'font-weight:600', text: COPY.linkSignUp,
+          onclick: function (ev) { ev.preventDefault(); setState({ view: 'register', loginError: null }); },
+        }),
+      ]),
+      el('div', { style: 'margin-top:24px;padding-top:20px;border-top:1px solid oklch(92% 0.006 260)' }, [
+        el('div', { style: 'font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:oklch(55% 0.02 260);margin-bottom:8px', text: COPY.testAccountsHeading }),
+        el('div', { style: "font-family:'IBM Plex Mono',monospace;font-size:12px;color:oklch(40% 0.02 260);line-height:1.7" }, [
+          el('div', { text: 'manager@vacaflow.test / Manager123!' }),
+          el('div', { text: 'employee@vacaflow.test / Employee123!' }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function renderRegister() {
+    var roleOption = function (value, labelText) {
+      return el('label', { style: 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid oklch(85% 0.008 260);border-radius:8px;padding:10px;cursor:pointer;font-size:14px' }, [
+        el('input', {
+          // No re-render: the browser already moves the checked state
+          // between the two radios, and rebuilding the tree here would drop
+          // focus mid-selection for a keyboard user arrowing across them.
+          type: 'radio', name: 'role', checked: state.registerFields.role === value,
+          onchange: function () { state.registerFields.role = value; },
+        }),
+        labelText,
+      ]);
+    };
+
+    var form = el('form', {
+      style: 'display:flex;flex-direction:column;gap:16px',
+      onsubmit: function (ev) { ev.preventDefault(); doRegister(); },
+    }, [
+      field('reg-name', COPY.labelFullName, el('input', {
+        id: 'reg-name', type: 'text', required: true, maxlength: '120',
+        value: state.registerFields.fullName, style: S.input,
+        oninput: function (ev) { state.registerFields.fullName = ev.target.value; },
+      }), state.registerErrors.fullName),
+      field('reg-email', COPY.labelEmail, el('input', {
+        id: 'reg-email', type: 'email', required: true, autocomplete: 'email',
+        value: state.registerFields.email, style: S.input,
+        oninput: function (ev) { state.registerFields.email = ev.target.value; },
+      }), state.registerErrors.email),
+      field('reg-password', COPY.labelPassword, el('input', {
+        id: 'reg-password', type: 'password', required: true, autocomplete: 'new-password',
+        value: state.registerFields.password, style: S.input,
+        oninput: function (ev) { state.registerFields.password = ev.target.value; },
+      }), state.registerErrors.password, COPY.passwordHelper),
+      el('fieldset', { style: 'border:none;padding:0;margin:0' }, [
+        el('legend', { style: 'font-size:13px;font-weight:600;margin-bottom:8px;padding:0', text: COPY.labelRole }),
+        el('div', { style: 'display:flex;gap:8px' }, [
+          roleOption('Employee', COPY.roleEmployee),
+          roleOption('Manager', COPY.roleManager),
+        ]),
+      ]),
+      el('button', { type: 'submit', disabled: state.saving, style: 'margin-top:8px;' + S.primaryBtn, text: COPY.btnCreateAccount }),
+    ]);
+
+    return authCard(420, COPY.createAccountSubtitle, [
+      form,
+      el('div', { style: 'margin-top:20px;font-size:14px;color:oklch(50% 0.02 260)' }, [
+        COPY.linkHaveAccount,
+        el('a', {
+          href: '#', style: 'font-weight:600', text: COPY.linkSignIn,
+          onclick: function (ev) { ev.preventDefault(); setState({ view: 'login', registerErrors: {} }); },
+        }),
+      ]),
+    ]);
+  }
+
+  function renderHeader(me, queueCount) {
+    var isManager = me.role === 'Manager';
+    var queueIsActive = state.navTab === 'queue' && isManager;
+    var queueLabel = COPY.navQueue + (queueCount > 0 ? ' (' + queueCount + ')' : '');
+
+    return el('header', { style: 'display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:white;border-bottom:1px solid oklch(90% 0.006 250)' }, [
+      el('div', { style: 'display:flex;align-items:center;gap:36px' }, [
+        el('div', { style: "font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:18px;letter-spacing:-0.02em", text: COPY.wordmark }),
+        el('nav', { style: 'display:flex;gap:6px' }, [
+          el('button', {
+            style: queueIsActive ? S.navInactive : S.navActive, text: COPY.navRequests,
+            onclick: function () { setState({ view: 'requests', navTab: 'requests', banner: null }); reloadList(); },
+          }),
+          isManager ? el('button', {
+            style: queueIsActive ? S.navActive : S.navInactive, text: queueLabel,
+            onclick: function () { setState({ view: 'requests', navTab: 'queue', banner: null }); reloadList(); },
+          }) : null,
+        ]),
+      ]),
+      el('div', { style: 'display:flex;align-items:center;gap:16px' }, [
+        el('div', { style: 'text-align:right' }, [
+          el('div', { style: 'font-size:14px;font-weight:600', text: me.fullName }),
+          el('div', { style: 'font-size:12px;color:oklch(50% 0.02 260)', text: isManager ? COPY.roleManager : COPY.roleEmployee }),
+        ]),
+        el('button', {
+          style: 'background:white;border:1px solid oklch(85% 0.008 260);padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer',
+          text: COPY.signOut, onclick: doLogout,
+        }),
+      ]),
+    ]);
+  }
+
+  function renderBanner() {
+    var banner = state.banner;
+    if (!banner) { return null; }
+    var isError = banner.type === 'error';
+    var bg = isError ? 'oklch(95% 0.03 25)' : 'oklch(93% 0.06 150)';
+    var fg = isError ? 'oklch(35% 0.15 25)' : 'oklch(30% 0.12 150)';
+    var border = isError ? 'oklch(80% 0.1 25)' : 'oklch(78% 0.1 150)';
+
+    return el('div', { style: 'padding:16px 32px 0;max-width:1100px;width:100%;margin:0 auto;box-sizing:border-box' }, [
+      el('div', {
+        role: 'status',
+        style: 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:8px;font-size:14px;background:' + bg + ';color:' + fg + ';border:1px solid ' + border + ';animation:vfFade .15s ease-out',
+      }, [
+        el('span', { text: banner.message }),
+        el('button', {
+          'aria-label': COPY.dismissNotification, text: '×',
+          style: 'background:none;border:none;font-size:18px;line-height:1;cursor:pointer;color:inherit',
+          onclick: function () { setState({ banner: null }); },
+        }),
+      ]),
+    ]);
+  }
+
+  function skeleton(count, height) {
+    var blocks = [];
+    for (var i = 0; i < count; i++) {
+      blocks.push(el('div', { style: 'height:' + height + 'px;' + S.skeletonBlock }));
+    }
+    return el('div', { style: 'display:flex;flex-direction:column;gap:10px' }, blocks);
+  }
+
+  function renderMyRequests(me) {
+    var mine = db.requests
+      .filter(function (r) { return r.employeeId === me.id; })
+      .sort(function (a, b) { return b.createdAtUtc.localeCompare(a.createdAtUtc); });
+
+    var headerRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px' }, [
+      el('h1', { style: 'font-size:24px;font-weight:600;margin:0', text: COPY.titleMyRequests }),
+      el('button', {
+        style: 'background:oklch(52% 0.15 260);color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+        text: COPY.btnNewRequest,
+        onclick: goNewRequest,
+      }),
+    ]);
+
+    if (state.listLoading) { return el('div', null, [headerRow, skeleton(3, 64)]); }
+
+    if (!mine.length) {
+      return el('div', null, [headerRow, el('div', { style: S.emptyState }, [
+        el('div', { style: 'font-size:16px;font-weight:600;margin-bottom:6px', text: COPY.emptyRequestsTitle }),
+        el('div', { style: 'font-size:14px;color:oklch(50% 0.02 260);margin-bottom:20px', text: COPY.emptyRequestsBody }),
+        el('button', {
+          style: 'background:oklch(52% 0.15 260);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+          text: COPY.btnCreateRequest, onclick: goNewRequest,
+        }),
+      ])]);
+    }
+
+    var rows = mine.map(function (r) {
+      var meta = stateMeta(r.state);
+      var actions = [];
+      if (r.state === 'Draft') {
+        actions.push(el('button', { style: S.rowBtn, text: COPY.btnEdit, onclick: function () { goEditRequest(r.id); } }));
+        actions.push(el('button', { style: S.rowPrimaryBtn, text: COPY.btnSubmit, onclick: function () { submitRequest(r.id); } }));
+      } else {
+        actions.push(el('button', { style: S.rowBtn, text: COPY.btnView, onclick: function () { goViewRequest(r.id); } }));
+      }
+      if (r.state === 'Draft' || r.state === 'Submitted') {
+        actions.push(el('button', { style: S.rowDangerBtn, text: COPY.btnCancel, onclick: function () { setState({ cancelConfirmId: r.id }); } }));
+      }
+
+      return el('div', { style: 'display:flex;align-items:center;gap:16px;padding:16px 20px;' + S.rowCard + ';flex-wrap:wrap' }, [
+        el('div', { style: 'flex:1;min-width:180px' }, [
+          el('div', { style: 'font-size:15px;font-weight:600', text: absenceTypeName(r.absenceTypeId) }),
+          el('div', { style: 'font-size:13px;color:oklch(50% 0.02 260);margin-top:2px', text: r.startDate + ' → ' + r.endDate }),
+        ]),
+        el('div', { style: 'padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:' + meta.bg + ';color:' + meta.fg, text: meta.label }),
+        el('div', { style: 'display:flex;gap:8px' }, actions),
+      ]);
+    });
+
+    return el('div', null, [headerRow, el('div', { style: 'display:flex;flex-direction:column;gap:10px' }, rows)]);
+  }
+
+  function queueFor(me) {
+    return db.requests
+      .filter(function (r) { return r.state === 'Submitted'; })
+      .map(function (r) { return { r: r, owner: getEmployee(r.employeeId) }; })
+      .filter(function (x) { return x.owner && x.owner.managerId === me.id && x.owner.id !== me.id; })
+      .sort(function (a, b) { return b.r.createdAtUtc.localeCompare(a.r.createdAtUtc); });
+  }
+
+  function renderQueue(me) {
+    var title = el('h1', { style: 'font-size:24px;font-weight:600;margin:0 0 24px', text: COPY.titleApprovalQueue });
+    if (state.listLoading) { return el('div', null, [title, skeleton(2, 96)]); }
+
+    var rows = queueFor(me);
+    if (!rows.length) {
+      return el('div', null, [title, el('div', { style: S.emptyState }, [
+        el('div', { style: 'font-size:16px;font-weight:600;margin-bottom:6px', text: COPY.emptyQueueTitle }),
+        el('div', { style: 'font-size:14px;color:oklch(50% 0.02 260)', text: COPY.emptyQueueBody }),
+      ])]);
+    }
+
+    var cards = rows.map(function (entry) {
+      var r = entry.r, owner = entry.owner;
+      return el('div', { style: 'padding:20px;' + S.rowCard }, [
+        el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap' }, [
+          el('div', null, [
+            el('div', { style: 'font-size:15px;font-weight:600', text: owner.fullName }),
+            el('div', { style: 'font-size:13px;color:oklch(50% 0.02 260);margin-top:2px', text: absenceTypeName(r.absenceTypeId) + ' · ' + r.startDate + ' → ' + r.endDate }),
+          ]),
+          el('div', { style: 'display:flex;gap:8px;flex-shrink:0' }, [
+            el('button', {
+              style: 'padding:8px 16px;border-radius:7px;border:1px solid oklch(80% 0.1 25);background:white;color:oklch(45% 0.15 25);font-size:13px;font-weight:600;cursor:pointer',
+              text: COPY.btnReject,
+              onclick: function () { setState({ decisionModal: { id: r.id, action: 'reject', comment: '' } }); },
+            }),
+            el('button', {
+              style: 'padding:8px 16px;border-radius:7px;border:none;background:oklch(55% 0.14 150);color:white;font-size:13px;font-weight:600;cursor:pointer',
+              text: COPY.btnApprove,
+              onclick: function () { setState({ decisionModal: { id: r.id, action: 'approve', comment: '' } }); },
+            }),
+          ]),
+        ]),
+        el('div', { style: 'margin-top:12px;padding-top:12px;border-top:1px solid oklch(94% 0.004 250);font-size:14px;color:oklch(30% 0.02 260)', text: r.reason }),
+      ]);
+    });
+
+    return el('div', null, [title, el('div', { style: 'display:flex;flex-direction:column;gap:10px' }, cards)]);
+  }
+
+  function goNewRequest() {
+    setState({
+      view: 'form', formMode: 'create', formRequestId: null,
+      formFields: { absenceTypeId: '', startDate: '', endDate: '', reason: '' },
+      formErrors: {}, banner: null,
+    });
+  }
+
+  // Both open a request the rendered row pointed at. That row can be stale —
+  // a second tab open on the same file holds its own copy of the store and
+  // may already have replaced the row. Without this guard the click throws
+  // and the button just looks dead.
+  function openRequest(id, mode) {
+    var r = findRequest(id);
+    if (!r) { setState({ banner: { type: 'error', message: COPY.VF_REQ_006 } }); return; }
+    setState({
+      view: 'form', formMode: mode, formRequestId: id,
+      formFields: { absenceTypeId: r.absenceTypeId, startDate: r.startDate, endDate: r.endDate, reason: r.reason },
+      formErrors: {}, banner: null,
+    });
+  }
+
+  function goEditRequest(id) { openRequest(id, 'edit'); }
+
+  function goViewRequest(id) { openRequest(id, 'view'); }
+
+  function backToList() { setState({ view: 'requests', banner: null }); reloadList(); }
+
+  function renderForm(me) {
+    var isView = state.formMode === 'view';
+    var readOnly = isView;
+    var title = state.formMode === 'create' ? COPY.formTitleNew : (isView ? COPY.formTitleDetail : COPY.formTitleEdit);
+
+    var typeSelect = el('select', {
+      id: 'f-type', disabled: readOnly,
+      style: S.input + ';background:white',
+      onchange: function (ev) { state.formFields.absenceTypeId = ev.target.value; },
+    }, [el('option', { value: '', text: COPY.absenceTypePlaceholder })].concat(
+      db.absenceTypes.filter(function (t) { return t.isActive; }).map(function (t) {
+        return el('option', { value: t.id, text: t.name, selected: t.id === state.formFields.absenceTypeId });
+      })
+    ));
+
+    var reasonCount = function (value) { return (value || '').length + '/500'; };
+    var counterNode = el('span', { style: 'font-size:12px;color:oklch(55% 0.02 260)', text: reasonCount(state.formFields.reason) });
+
+    var reasonHeader = el('div', { style: 'display:flex;justify-content:space-between' }, [
+      el('label', { for: 'f-reason', style: S.label, text: COPY.labelReason }),
+      counterNode,
+    ]);
+
+    var reasonBox = el('textarea', {
+      id: 'f-reason', maxlength: '500', rows: '4', disabled: readOnly,
+      style: S.input + ';resize:vertical',
+      oninput: function (ev) {
+        state.formFields.reason = ev.target.value;
+        counterNode.textContent = reasonCount(ev.target.value);
+      },
+    });
+    reasonBox.value = state.formFields.reason || '';
+
+    var decisionBlock = null;
+    if (isView && state.formRequestId) {
+      var r = findRequest(state.formRequestId);
+      if (r && (r.state === 'Approved' || r.state === 'Rejected')) {
+        var ap = db.approvals.filter(function (a) { return a.requestId === r.id; })[0];
+        if (ap) {
+          var manager = getEmployee(ap.responsibleManagerId);
+          var when = new Date(ap.decidedAtUtc).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+          decisionBlock = el('div', { style: 'margin-top:24px;padding-top:20px;border-top:1px solid oklch(92% 0.006 260)' }, [
+            el('div', { style: 'font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:oklch(55% 0.02 260);margin-bottom:10px', text: COPY.decisionHeading }),
+            el('div', { style: 'font-size:15px;font-weight:600;margin-bottom:4px', text: stateMeta(ap.decision).label }),
+            el('div', { style: 'font-size:14px;color:oklch(40% 0.02 260)', text: COPY.decisionBy(manager ? manager.fullName : '—', when) }),
+            ap.comment ? el('div', { style: 'margin-top:10px;font-size:14px;color:oklch(30% 0.02 260);background:oklch(97% 0.004 250);padding:12px 14px;border-radius:8px', text: ap.comment }) : null,
+          ]);
+        }
+      }
+    }
+
+    var cancellable = (function () {
+      if (!isView || !state.formRequestId) { return false; }
+      var r = findRequest(state.formRequestId);
+      return !!(r && r.state === 'Submitted' && r.employeeId === me.id);
+    })();
+
+    var endInput = el('input', {
+      id: 'f-end', type: 'date', min: state.formFields.startDate || todayStr(), value: state.formFields.endDate, disabled: readOnly,
+      style: S.input, oninput: function (ev) { state.formFields.endDate = ev.target.value; },
+    });
+    var startInput = el('input', {
+      id: 'f-start', type: 'date', min: todayStr(), value: state.formFields.startDate, disabled: readOnly,
+      style: S.input,
+      oninput: function (ev) {
+        state.formFields.startDate = ev.target.value;
+        // Keeps the end-date picker's floor tracking the start date as the
+        // user types, the way the original did by re-rendering on every
+        // keystroke. Set directly rather than re-rendering, so the field
+        // being typed into does not lose focus.
+        endInput.min = ev.target.value || todayStr();
+      },
+    });
+
+    return el('div', null, [
+      el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:24px' }, [
+        el('button', {
+          'aria-label': COPY.backToMyRequests, text: '←',
+          style: 'background:none;border:none;font-size:20px;cursor:pointer;color:oklch(50% 0.02 260)',
+          onclick: backToList,
+        }),
+        el('h1', { style: 'font-size:24px;font-weight:600;margin:0', text: title }),
+      ]),
+      el('div', { style: 'max-width:560px;' + S.card + ';padding:32px' }, [
+        state.formErrors.general ? el('div', { role: 'alert', style: S.alertBox, text: state.formErrors.general }) : null,
+        el('div', { style: 'display:flex;flex-direction:column;gap:18px' }, [
+          field('f-type', COPY.labelAbsenceType, typeSelect, state.formErrors.absenceTypeId),
+          el('div', { style: 'display:flex;gap:16px;flex-wrap:wrap' }, [
+            el('div', { style: 'flex:1;min-width:180px' }, [field('f-start', COPY.labelStartDate, startInput, state.formErrors.startDate)]),
+            el('div', { style: 'flex:1;min-width:180px' }, [field('f-end', COPY.labelEndDate, endInput, state.formErrors.endDate)]),
+          ]),
+          el('div', null, [
+            reasonHeader,
+            reasonBox,
+            state.formErrors.reason ? el('p', { role: 'alert', style: S.fieldError, text: state.formErrors.reason }) : null,
+          ]),
+        ]),
+        decisionBlock,
+        el('div', { style: 'display:flex;gap:12px;margin-top:28px;align-items:center;flex-wrap:wrap' }, [
+          !readOnly ? el('button', {
+            disabled: state.saving,
+            style: 'background:oklch(52% 0.15 260);color:white;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+            text: state.formMode === 'create' ? COPY.btnSaveDraft : COPY.btnSaveChanges,
+            onclick: saveForm,
+          }) : null,
+          el('button', { style: S.outlineBtn, text: readOnly ? COPY.btnBack : COPY.btnCancel, onclick: backToList }),
+          cancellable ? el('button', {
+            style: 'margin-left:auto;' + S.dangerOutlineBtn,
+            text: COPY.btnCancelRequest,
+            onclick: function () { setState({ cancelConfirmId: state.formRequestId }); },
+          }) : null,
+        ]),
+      ]),
+    ]);
+  }
+
+  function renderCancelModal() {
+    if (!state.cancelConfirmId) { return null; }
+    return el('div', {
+      style: S.modalOverlay,
+      onclick: function () { setState({ cancelConfirmId: null }); },
+    }, [
+      el('div', {
+        style: S.modalPanel + ';max-width:400px;width:90%',
+        role: 'dialog', 'aria-modal': 'true',
+        onclick: function (ev) { ev.stopPropagation(); },
+      }, [
+        el('div', { style: 'font-size:17px;font-weight:600;margin-bottom:8px', text: COPY.modalCancelTitle }),
+        el('div', { style: 'font-size:14px;color:oklch(45% 0.02 260);margin-bottom:24px', text: COPY.modalCancelBody }),
+        el('div', { style: 'display:flex;gap:12px;justify-content:flex-end' }, [
+          el('button', {
+            style: 'background:white;border:1px solid oklch(85% 0.008 260);padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+            text: COPY.btnBack, onclick: function () { setState({ cancelConfirmId: null }); },
+          }),
+          el('button', {
+            style: 'background:oklch(55% 0.18 25);color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+            text: COPY.btnYesCancel, onclick: confirmCancel,
+          }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function renderDecisionModal() {
+    var modal = state.decisionModal;
+    if (!modal) { return null; }
+    var isApprove = modal.action === 'approve';
+
+    var commentBox = el('textarea', {
+      id: 'decision-comment', maxlength: '500', rows: '3',
+      style: S.input.replace('font-size:15px', 'font-size:14px') + ';resize:vertical',
+      oninput: function (ev) { modal.comment = ev.target.value; },
+    });
+    commentBox.value = modal.comment || '';
+
+    return el('div', {
+      style: S.modalOverlay,
+      onclick: function () { setState({ decisionModal: null }); },
+    }, [
+      el('div', {
+        style: S.modalPanel + ';max-width:420px;width:90%',
+        role: 'dialog', 'aria-modal': 'true',
+        onclick: function (ev) { ev.stopPropagation(); },
+      }, [
+        el('div', { style: 'font-size:17px;font-weight:600;margin-bottom:16px', text: isApprove ? COPY.modalApproveTitle : COPY.modalRejectTitle }),
+        el('label', { for: 'decision-comment', style: S.label, text: COPY.labelDecisionComment }),
+        commentBox,
+        el('div', { style: 'display:flex;gap:12px;justify-content:flex-end;margin-top:20px' }, [
+          el('button', {
+            style: 'background:white;border:1px solid oklch(85% 0.008 260);padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+            text: COPY.btnCancel, onclick: function () { setState({ decisionModal: null }); },
+          }),
+          el('button', {
+            style: 'background:' + (isApprove ? 'oklch(55% 0.14 150)' : 'oklch(55% 0.18 25)') + ';color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer',
+            text: isApprove ? COPY.btnApprove : COPY.btnReject, onclick: confirmDecision,
+          }),
+        ]),
+      ]),
+    ]);
+  }
+
+  // render() clears the root before rebuilding, so any throw inside the tree
+  // build would otherwise leave a blank page with no route back short of
+  // clearing site data. Malformed stored rows are the known way in; this
+  // catches those and anything else, and tells the reviewer how to recover.
+  function render() {
+    try { renderTree(); }
+    catch (err) {
+      console.error('The prototype could not render:', err);
+      var root = document.getElementById('root');
+      root.textContent = '';
+      root.appendChild(el('div', { style: 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px' }, [
+        el('div', { style: 'max-width:480px;' + S.card + ';padding:32px' }, [
+          el('div', { style: 'font-size:17px;font-weight:600;margin-bottom:8px', text: COPY.renderFailedTitle }),
+          el('div', { style: 'font-size:14px;color:oklch(45% 0.02 260)', text: COPY.renderFailedBody }),
+        ]),
+      ]));
+    }
+  }
+
+  function renderTree() {
+    var root = document.getElementById('root');
+    root.textContent = '';
+
+    var me = currentUser();
+    if (!me) {
+      // The banner slot lives in the authenticated shell, but a reseed notice
+      // or a storage warning is raised precisely when there is no session —
+      // without this the message would be written to state and never seen.
+      var signedOutBanner = renderBanner();
+      if (signedOutBanner) { root.appendChild(signedOutBanner); }
+      root.appendChild(state.view === 'register' ? renderRegister() : renderLogin());
+      return;
+    }
+
+    var isManager = me.role === 'Manager';
+    var queueCount = isManager ? queueFor(me).length : 0;
+    var showQueue = state.navTab === 'queue' && isManager;
+
+    var main;
+    if (state.view === 'form') { main = renderForm(me); }
+    else if (showQueue) { main = renderQueue(me); }
+    else { main = renderMyRequests(me); }
+
+    root.appendChild(el('div', { style: 'min-height:100vh;display:flex;flex-direction:column' }, [
+      renderHeader(me, queueCount),
+      renderBanner(),
+      el('main', { id: 'main-content', style: 'flex:1;padding:32px;max-width:1100px;width:100%;margin:0 auto;box-sizing:border-box' }, [main]),
+    ]));
+
+    var cancelModal = renderCancelModal();
+    if (cancelModal) { root.appendChild(cancelModal); }
+    var decisionModal = renderDecisionModal();
+    if (decisionModal) { root.appendChild(decisionModal); }
+  }
+
+  // --- boot --------------------------------------------------------------
+
+  seed();
+  if (seedNotice) { state.banner = seedNotice; }
+
+  document.getElementById('skip-link').textContent = COPY.skipLink;
+
+  var storedSession = null;
+  try { storedSession = localStorage.getItem(SESSION_KEY); } catch (err) { console.error('Could not read the session:', err); }
+  if (storedSession && getEmployee(storedSession)) {
+    state.sessionId = storedSession;
+    state.view = 'requests';
+  }
+
+  window.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') { return; }
+    if (state.decisionModal) { setState({ decisionModal: null }); }
+    else if (state.cancelConfirmId) { setState({ cancelConfirmId: null }); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
