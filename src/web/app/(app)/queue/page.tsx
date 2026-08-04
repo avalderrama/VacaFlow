@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react';
 import { ApplicationError, approveRequest, getMe, listRequests, rejectRequest } from '@/lib/api';
 import type { RequestSummary } from '@/lib/types';
 import { Banner } from '@/components/feedback/Banner';
+import { EmptyState } from '@/components/feedback/EmptyState';
+import { ListSkeleton } from '@/components/feedback/ListSkeleton';
 import { QueueCard } from '@/components/queue/QueueCard';
 
 // The manager's own requests travel in the same payload as their team's
@@ -22,6 +24,7 @@ function fetchQueue(): Promise<RequestSummary[]> {
 
 export default function QueuePage() {
   const [queue, setQueue] = useState<RequestSummary[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);
@@ -30,6 +33,7 @@ export default function QueuePage() {
     fetchQueue()
       .then(setQueue)
       .catch((caught) => {
+        setLoadFailed(true);
         setError(caught instanceof ApplicationError ? caught.apiError.message : 'Something went wrong.');
       });
   }, []);
@@ -70,8 +74,13 @@ export default function QueuePage() {
       )}
       {error && <Banner message={error} variant="error" onDismiss={() => setError(null)} />}
       <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '24px' }}>Approval Queue</h1>
-      {queue === null && error === null && <p>Loading…</p>}
-      {queue !== null && queue.length === 0 && <p>No requests are waiting on your decision.</p>}
+      {queue === null && !loadFailed && <ListSkeleton count={2} blockHeight={96} />}
+      {queue !== null && queue.length === 0 && (
+        <EmptyState
+          title="No pending requests"
+          body="When an employee assigned to you submits a request, it will appear here."
+        />
+      )}
       {queue !== null && queue.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {queue.map((request) => (

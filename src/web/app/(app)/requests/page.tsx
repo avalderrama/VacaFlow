@@ -14,6 +14,8 @@ import {
 } from '@/lib/api';
 import type { RequestSummary } from '@/lib/types';
 import { Banner } from '@/components/feedback/Banner';
+import { EmptyState } from '@/components/feedback/EmptyState';
+import { ListSkeleton } from '@/components/feedback/ListSkeleton';
 import { RequestRow } from '@/components/requests/RequestRow';
 import { consumePendingNotification } from '@/lib/session';
 
@@ -98,8 +100,15 @@ export default function RequestsPage() {
           New request
         </button>
       </div>
-      {requests === null && !loadFailed && <p>Loading…</p>}
-      {requests !== null && requests.length === 0 && <p>You haven&apos;t created any requests yet.</p>}
+      {requests === null && !loadFailed && <ListSkeleton count={3} blockHeight={64} />}
+      {requests !== null && requests.length === 0 && (
+        <EmptyState
+          title="You haven't created any requests yet"
+          body="Create your first absence request to get started."
+          actionLabel="Create request"
+          onAction={() => router.push('/requests/new')}
+        />
+      )}
       {requests !== null && requests.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {requests.map((request) => (
