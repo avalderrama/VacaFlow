@@ -4,10 +4,11 @@
 // AppHeader — none of the four routes under this group need changes,
 // they render inside <main> and inherit the shell for free.
 import { AppHeader } from '@/components/shell/AppHeader';
+import { PendingQueueCountProvider } from '@/components/shell/PendingQueueCountProvider';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <PendingQueueCountProvider>
       <AppHeader />
       <main
         id="main-content"
@@ -15,6 +16,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
-    </>
+    </PendingQueueCountProvider>
   );
 }

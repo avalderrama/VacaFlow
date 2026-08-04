@@ -7,11 +7,13 @@ import { useEffect, useState } from 'react';
 import { getMe, signOut, ApplicationError } from '@/lib/api';
 import type { AuthenticatedUser } from '@/lib/types';
 import { NavTabs } from './NavTabs';
+import { usePendingQueueCount } from './PendingQueueCountProvider';
 
 export function AppHeader() {
   const [me, setMe] = useState<AuthenticatedUser | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { count: pendingCount } = usePendingQueueCount();
 
   useEffect(() => {
     getMe()
@@ -62,7 +64,7 @@ export function AppHeader() {
         >
           VacaFlow
         </span>
-        {me && <NavTabs role={me.role} />}
+        {me && <NavTabs role={me.role} pendingCount={pendingCount} />}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         {error && (

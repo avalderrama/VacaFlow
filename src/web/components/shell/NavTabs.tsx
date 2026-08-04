@@ -7,7 +7,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { EmployeeRole } from '@/lib/types';
 
-export function NavTabs({ role }: { role: EmployeeRole }) {
+interface NavTabsProps {
+  role: EmployeeRole;
+  // null covers both "no pending requests" and "still loading" (US-035
+  // AC2) — neither case shows a parenthetical.
+  pendingCount: number | null;
+}
+
+export function NavTabs({ role, pendingCount }: NavTabsProps) {
   const pathname = usePathname();
   const isQueueActive = pathname.startsWith('/queue');
 
@@ -26,7 +33,7 @@ export function NavTabs({ role }: { role: EmployeeRole }) {
           aria-current={isQueueActive ? 'page' : undefined}
           className={`nav-tab ${isQueueActive ? 'nav-tab-active' : ''}`}
         >
-          Approval Queue
+          Approval Queue{(pendingCount ?? 0) > 0 ? ` (${pendingCount})` : ''}
         </Link>
       )}
     </nav>
